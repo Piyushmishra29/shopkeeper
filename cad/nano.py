@@ -160,13 +160,33 @@ def case_lower():
                      P["floor_t"]-1,P["floor_t"]+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
-    ESP=(CW/2, CD-14.0)
-    for ddx in (-24,24):
-        for ddy in (-10.5,10.5):
-            m=union([m,cyl_z(5.0,P["floor_t"],P["floor_t"]+3.5,
-                             ESP[0]+ddx,ESP[1]+ddy)])
-            m=diff(m,cyl_z(1.7,P["floor_t"]+1,P["floor_t"]+4.5,
-                           ESP[0]+ddx,ESP[1]+ddy))
+    # ── ESP32-S3 cradle: slide-in rails with a retaining lip ──
+    # 63 x 25.5 board. Rails grip the long edges so it drops in and stays put
+    # with no screws; the USB-C end faces the rear window so it can be
+    # reflashed with the case shut.
+    EX, EY = CW/2, CD - 16.0
+    EBW, EBL, EBT = 25.5, 63.0, 1.6
+    FT = P["floor_t"]
+    for sgn in (-1, 1):
+        yy = EY + sgn*(EBW/2 + 1.4)
+        m=union([m,blk(EX-EBL/2-1.0, EX+EBL/2+1.0, yy-1.4, yy+1.4, FT, FT+5.2)])
+        # undercut so the board slides under a lip instead of needing screws
+        m=diff(m,blk(EX-EBL/2-1.5, EX+EBL/2+1.5,
+                     yy-1.5*sgn, yy+2.0*sgn, FT+2.4, FT+2.4+EBT+0.4))
+    # end stop at the front, open at the rear so the USB-C is reachable
+    m=union([m,blk(EX-EBL/2-1.0, EX-EBL/2+1.0, EY-EBW/2-1.4, EY+EBW/2+1.4,
+                   FT, FT+5.2)])
+
+    # ── half-size breadboard slot, 82 x 55 mm, for the servo wiring ──
+    # Sits over the ESP cradle on four pillars; the board's adhesive back
+    # sticks to the pillar tops.
+    BBX, BBY = CW/2, CD - 16.0
+    for ddx in (-33.0, 33.0):
+        for ddy in (-19.0, 19.0):
+            px_, py_ = BBX+ddx, BBY+ddy
+            if py_ > CD - WL - 3: continue
+            m=union([m,cyl_z(6.0, FT, FT+12.0, px_, py_)])
+            m=diff(m,cyl_z(1.7, FT+2, FT+13.0, px_, py_))
     for wx in (20,40,60):
         m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
@@ -177,7 +197,7 @@ def case_lower():
             m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
-    keep+= [(CW/2, CD-14.0, 34.0)]
+    keep+= [(CW/2, CD-16.0, 40.0)]
     gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
     for i in range(gx+1):
         for j in range(gy+1):
