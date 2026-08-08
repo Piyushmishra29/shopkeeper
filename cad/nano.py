@@ -620,7 +620,13 @@ aw = max(px + m.extents[0] for _, m, px, _ in placed)
 ah = max(py + m.extents[1] for _, m, _, py in placed)
 assert aw <= BED and ah <= BED, f"one-plate layout {aw:.0f}x{ah:.0f} exceeds the bed"
 pall = os.path.join(PL, "plate_ALL.3mf")
-write_3mf(pall, placed)
+# Colour the viewing copy: both case halves WHITE, everything else yellow.
+# This DOES make Bambu ask for a filament mapping - it is a viewing file, and
+# the two single-colour plates stay clean for actually printing.
+WHITE_PARTS = {"case_lower", "case_upper"}
+write_3mf(pall,
+          [(n, m, px, py, 0 if n in WHITE_PARTS else 1) for n, m, px, py in placed],
+          materials=[("white", "#F4F4F4FF"), ("yellow", "#F2B705FF")])
 merged = trimesh.util.concatenate([T(m.copy(), px, py, 0) for _, m, px, py in placed])
 merged.export(os.path.join(PL, "plate_ALL.stl"))
 gall = sum(m.volume/1000*1.24 for _, m, _, _ in placed)
