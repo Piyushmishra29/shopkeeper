@@ -96,7 +96,7 @@ e = raw["rack"].extents
 assert np.allclose(e, [14.0, RACK_L+6.0, P["fin_h"]+P["dr_floor"]+2.0], atol=1e-6), f"rack {e}"
 
 # nano.py:  y_closed = 7.8
-Y_CLOSED = 7.8(raw["drawer"].extents[1])
+Y_CLOSED = 7.8   # explicit now: case depth no longer derives it
 assert close(Y_CLOSED, 7.8), Y_CLOSED
 
 def decimate(m, target, tol=0.03):
