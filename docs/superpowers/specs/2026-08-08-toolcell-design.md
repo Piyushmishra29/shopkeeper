@@ -119,23 +119,35 @@ tabs, so it stands upright as specced in §3.2 with room to spare. An earlier wo
 Both live cells go in **one large drawer**. The small drawers become dummies — 27 mm is too shallow
 for an upright servo.
 
-Servos sit in a **shared central spine** rather than one at each outer edge, offset front-to-back
-from each other with shafts pointing opposite ways. This recovers 33 mm of usable bin width.
+**Servos sit at the two outer ends, with a single idler post in the middle.**
+
+A shared central spine was tried first and rejected. Two SG90s placed back-to-back in the middle
+overlap along the shaft axis, so they must be offset front-to-back — which puts their two shafts
+13.5 mm apart in Y. The flaps would then hinge on two different axes at two different depths and
+would not line up. Servos at the outer ends keeps **both shafts on one axis**, and as a bonus the
+carrier only needs to be 18 mm deep instead of 32.
 
 ```
-|<-- 69 flap -->|<- 33 spine ->|<-- 69 flap -->|     172.6 mm
-       CELL A      2× SG90          CELL B
+| SG90 |<-- flap A -->| post |<-- flap B -->| SG90 |    171.6 mm
+  23.3      45.4        10        45.4        23.3
 ```
+
+Both flaps' stub axles enter the **same through-bore** in the post from opposite sides, with a
+2.2 mm gap between their tips.
 
 | | |
 |---|---|
-| Bin clear volume | 69 × 85 × 42 mm |
-| Flap | 69 × 88 × 3 mm |
-| Flap mass | ~19 g |
+| Bin clear volume | **45.4 × 72.4 × 37.5 mm** |
+| Flap | 45.4 × 72.4 × 3 mm |
+| Flap mass | **15 g** (computed from the mesh) |
+| Hinge axis | z = 39 mm above the drawer floor, y = 9 mm from the back wall |
 | Live cells | A1, A2 — one large drawer |
 | Dummy cells | 2 small drawers, empty shells |
 | Material | PETG, 4 perimeters, 40% infill |
 | Colour | dark grey or black body, yellow flaps on live cells |
+
+A 45.4 × 72.4 bin takes a standard 40 × 40 mm insert box with 5 mm to spare, and two of them
+front-to-back.
 
 Yellow flaps on the live cells are intentional: they read as a designed accent, reinforce the
 pick-to-light idea, and stop the object looking like a 3D-printing experiment.
@@ -157,14 +169,18 @@ with the hinge axis at z ≈ 44 mm above the drawer floor.
 Printing it as one part is not a preference — it is what guarantees all four bearing features come
 off the same print and stay collinear.
 
-**Centre (x 70–103) — the spine.** Two SG90s stand **upright**, tabs vertical, in open-topped
-pockets so the part prints without supports and a servo can be swapped in seconds. Shafts point in
-**opposite directions** along the hinge axis. Their bodies overlap in X, so they are offset in Y:
-servo 1 at y 5–17.5, servo 2 at y 20–32.5. Each needs only 12.5 mm of drawer depth. Two M2×8
-self-tappers per servo pass through the mounting tabs into printed Ø1.6 pilot bosses.
+**Outer ends — the servos.** Two SG90s stand **upright**, tabs vertical, in open-topped pockets
+(23.3 × 12.8, floor at z = 17.1) so the part prints without supports and a servo can be swapped in
+seconds. Shafts point **inward** along the hinge axis. Each is trapped by a printed retainer bar on
+two M2 screws rather than through its own tab holes — the tabs sit mid-body along the shaft axis and
+are awkward to reach, and the bar is both easier to model and faster to service.
 
-**Outer ends (x ≈ 2 and x ≈ 170) — idlers.** A Ø4 stub axle printed on each flap runs in a Ø4.2
-blind bore. The servo drives one end; the idler carries the bending load.
+**Centre — the idler post.** A 10 mm post carrying a single Ø4.7 bore straight through. Both flaps'
+Ø3.85 stub axles enter it from opposite sides, 2.5 mm each, leaving a 2.2 mm gap. The servo drives
+one end of each flap; the post carries the other.
+
+**Profile.** The carrier is 52 mm tall only at the three housings (two servos, one post) and drops
+to a 20 mm web in between, so the flaps swing clear over it.
 
 **Coupling.** The single-arm horn from the servo bag mounts on the spline and screws to a 3 mm
 printed drive arm on the flap, using the horn holes at r = 11 mm and r = 16 mm with 2 × M2×6.
