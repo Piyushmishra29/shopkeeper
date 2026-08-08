@@ -27,7 +27,7 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=66.0, ch=53.0, wall=2.0,
+    cw=92.0, cd=66.0, ch=53.0, wall=2.0, floor_t=1.4,
     deck_z=25.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=2.0,
@@ -128,9 +128,12 @@ def rack_fin(length,h=None):
 LEDGE=3.0
 
 def case_lower():
-    """Mech bay, OPEN TOP. Prints floor-down with no ceiling anywhere."""
-    H=DECK                     # rim finishes flush with the deck's top face
-    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,WL,H+1))
+    """Mech bay, OPEN TOP. Prints floor-down with no ceiling anywhere.
+
+    Floor is thinner than the walls and perforated: it carries nothing but the
+    servo cradles and the ESP32 posts, and every gram there is print time."""
+    H=DECK; FT=P["floor_t"]
+    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,FT,H+1))
     # ledge the deck drops onto
     m=union([m,blk(WL,CW-WL,WL,CD-WL,H-P["deck_t"]-LEDGE,H-P["deck_t"])])
     # NO front rail: it sat directly in the path of both drive fins. The deck
@@ -162,6 +165,15 @@ def case_lower():
         z=6+i*7
         for x in (-1,CW-WL-1):
             m=diff(m,blk(x,x+WL+2,CD*0.34,CD*0.62,z,z+2.6))
+    # lightening holes, skipping anything mounted to the floor
+    keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
+    keep+= [(CW/2, CD*0.78, 34.0)]
+    gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
+    for i in range(gx+1):
+        for j in range(gy+1):
+            x=WL+9+i*13; y=WL+9+j*13
+            if any((x-kx)**2+(y-ky)**2 < kr**2 for kx,ky,kr in keep): continue
+            m=diff(m,cyl_z(8.0,-1,P["floor_t"]+1,x,y))
     return chamfer(m)
 
 def deck():
@@ -351,44 +363,51 @@ print("  ALL CHECKS PASSED")
 
 PL=os.path.join(OUT,"plates"); os.makedirs(PL,exist_ok=True)
 for f in glob.glob(os.path.join(PL,"*.3mf")): os.remove(f)
+
 def land(m):
     m=m.copy(); m.apply_translation(-m.bounds[0])
     if m.extents[1]>m.extents[0]:
         m.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2,[0,0,1]))
         m.apply_translation(-m.bounds[0])
     return m
-dd,rk2,pn=(land(parts["drawer"]),land(parts["rack"]),land(parts["pinion"]))
-c=land(parts["case_lower"])
-BED=256.0
-# white shell, yellow everything that moves
-MATS=[("white","#F2F2F2FF"),("yellow","#F2B705FF")]
-COL={"case_lower":0,"case_upper":0,
-     "deck":1,"drawer_A":1,"drawer_B":1,"rack_A":1,"rack_B":1,
-     "pinion_1":1,"pinion_2":1,"knob_A":1,"knob_B":1}
-x,y,row=6.0,6.0,c.extents[1]
-L=[("case_lower",c,6,6)]
-x=6+c.extents[0]+6
+
 def print_pose(nm):
     mm=parts[nm].copy()
     if nm in FLIP:
         mm.apply_transform(trimesh.transformations.rotation_matrix(math.pi,[1,0,0]))
     return land(mm)
-for nm in ("case_upper","deck"):
-    mm=print_pose(nm)
-    if x+mm.extents[0]>BED-6: x=6.0; y+=row+6.0; row=0.0
-    L.append((nm,mm,x,y)); x+=mm.extents[0]+5; row=max(row,mm.extents[1])
-kb=land(parts["knob"])
-_items=[("drawer_A",dd),("drawer_B",dd),("rack_A",rk2),("rack_B",rk2),
-        ("pinion_1",pn),("pinion_2",pn)]
-if P["pull"]=="knob":
-    _items[4:4]=[("knob_A",kb),("knob_B",kb)]
-for nm,mm in _items:
-    if x+mm.extents[0] > BED-6:            # wrap, or the plate silently overruns
-        x=6.0; y+=row+6.0; row=0.0
-    L.append((nm,mm,x,y)); x+=mm.extents[0]+5; row=max(row,mm.extents[1])
-LC=[(n,m,px,py,COL.get(n,0)) for n,m,px,py in L]
-p=os.path.join(PL,"plate_nano.3mf"); write_3mf(p,LC,materials=MATS); o,b=verify(p)
-w=max(x+m.extents[0] for _,m,x,y in L); h=max(y+m.extents[1] for _,m,x,y in L)
-assert w<=BED and h<=BED, f"plate {w:.0f}x{h:.0f} exceeds the {BED:.0f} mm bed"
-print(f"  ONE plate {w:.0f} x {h:.0f} mm, {len(L)} objects, ok={o==b}")
-print(f"  {os.path.normpath(p)}")
+
+BED=256.0
+# ONE COLOUR PER PLATE. A single-nozzle machine changing colour mid-plate
+# purges a tower for every swap; splitting the plates costs nothing and wastes
+# nothing. Swap the spool between the two prints.
+PLATES=[("1_white",  "#F2F2F2FF", [("case_lower",1),("case_upper",1)]),
+        ("2_yellow", "#F2B705FF", [("deck",1),("drawer",2),("rack",2),
+                                   ("pinion",2)] +
+                                  ([("knob",2)] if P["pull"]=="knob" else []))]
+
+def pack(items):
+    placed,x,y,row=[],6.0,6.0,0.0
+    for nm,q in items:
+        mm=print_pose(nm)
+        for k in range(q):
+            if x+mm.extents[0]>BED-6: x=6.0; y+=row+6.0; row=0.0
+            placed.append((nm if q==1 else f"{nm}_{chr(65+k)}",mm,x,y))
+            x+=mm.extents[0]+5; row=max(row,mm.extents[1])
+    return placed,max(px+m.extents[0] for _,m,px,_ in placed),y+row+6
+
+total=0.0
+for lab,col,items in PLATES:
+    placed,w,h=pack(items)
+    assert w<=BED and h<=BED, f"plate {lab} is {w:.0f}x{h:.0f}, bed is {BED:.0f}"
+    g=sum(m.volume/1000*1.27 for _,m,_,_ in placed); total+=g
+    path=os.path.join(PL,f"plate_{lab}.3mf")
+    write_3mf(path,[(n,m,px,py,0) for n,m,px,py in placed],
+              materials=[(lab.split("_")[1],col)])
+    o,b=verify(path)
+    print(f"\n  plate_{lab:9s} {w:5.0f} x {h:3.0f} mm   {g:5.1f} g   "
+          f"{len(placed)} objects  ok={o==b}")
+    for n,m,_,_ in placed: print(f"      {n}")
+print(f"\n  2 plates, {total:.0f} g solid (~{total*0.85:.0f} g sliced), "
+      f"ZERO filament changes")
+print(f"  {os.path.normpath(PL)}")
