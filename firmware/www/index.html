@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1F2124">
+<title>shopkeeper NANO</title>
+<style>
+/* Ommi Forge tokens. Lifted from the brand kit rather than re-picked:
+   saffron and mesh are the forge colours, graphite is the ground, ember is
+   the only one with enough contrast to carry small text on light. */
+:root{
+  --saffron:#FF9933; --mesh:#FF5533; --ember:#C2381C; --peach:#FFBC7D;
+  --graphite:#1F2124; --steel:#54595F; --ash:#7A7A7A; --paper:#FAFAFA;
+  --ink:#141518; --panel:#25272B; --panel2:#2C2F34; --line:#383B41;
+  --ok:#4FBF7B; --warn:#E8B54A;
+  --r:3px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ink);color:var(--paper);font:15px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;overscroll-behavior:none;
+  background-image:
+    linear-gradient(rgba(255,153,51,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,153,51,.028) 1px,transparent 1px);
+  background-size:26px 26px;
+}
+.wrap{max-width:820px;margin:0 auto;padding:18px 16px 40px}
+
+/* ── masthead ─────────────────────────────────────────────────────────── */
+.mast{display:flex;align-items:center;gap:12px;padding:6px 0 16px;
+      border-bottom:1px solid var(--line);margin-bottom:18px}
+.mark{width:30px;height:30px;flex:none}
+.mast h1{margin:0;font-size:1.02rem;font-weight:700;letter-spacing:-.01em}
+.mast h1 span{color:var(--ash);font-weight:400}
+.eyebrow{font-family:var(--mono);font-size:.58rem;letter-spacing:.22em;
+         text-transform:uppercase;color:var(--saffron)}
+.mast .grow{flex:1}
+.pill{font-family:var(--mono);font-size:.6rem;letter-spacing:.13em;
+      text-transform:uppercase;padding:4px 9px;border-radius:100px;
+      border:1px solid var(--line);color:var(--ash);white-space:nowrap}
+.pill.live{color:var(--ok);border-color:rgba(79,191,123,.4)}
+.pill.shut{color:var(--ember);border-color:rgba(194,56,28,.45)}
+
+/* ── lock screen ──────────────────────────────────────────────────────── */
+.lock{display:flex;flex-direction:column;align-items:center;gap:20px;
+      padding:34px 0 10px;animation:rise .32s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.lock h2{margin:0;font-size:1.32rem;font-weight:700;letter-spacing:-.015em}
+.lock p{margin:0;color:var(--ash);font-size:.88rem;text-align:center;max-width:34ch}
+.dots{display:flex;gap:11px;height:15px}
+.dots i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--steel);
+        transition:.16s}
+.dots i.on{background:var(--saffron);border-color:var(--saffron);
+           box-shadow:0 0 12px rgba(255,153,51,.55)}
+.dots.bad i{border-color:var(--ember);background:transparent;
+            animation:shake .34s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.pad{display:grid;grid-template-columns:repeat(3,74px);gap:10px}
+.pad button{height:60px;border:1px solid var(--line);background:var(--panel);
+  color:var(--paper);font:500 1.22rem/1 var(--mono);border-radius:var(--r);
+  cursor:pointer;transition:.12s}
+.pad button:active{background:var(--saffron);color:var(--ink);transform:scale(.96)}
+.pad button.aux{font-size:.66rem;letter-spacing:.12em;color:var(--ash)}
+.pad button:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+
+/* ── drawers ──────────────────────────────────────────────────────────── */
+.grid{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:660px){.grid{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+      overflow:hidden;display:flex;flex-direction:column}
+.card header{display:flex;align-items:center;gap:10px;padding:13px 15px;
+             border-bottom:1px solid var(--line)}
+.card header h3{margin:0;font-size:.98rem;font-weight:650;letter-spacing:-.01em}
+.card header .grow{flex:1}
+
+/* the drawer, drawn. A status word is abstract; a rectangle sliding out of a
+   rectangle is the product. */
+.viz{height:74px;position:relative;background:var(--ink);overflow:hidden;
+     border-bottom:1px solid var(--line)}
+.viz .case{position:absolute;inset:14px 16px;border:2px solid var(--steel);
+           border-radius:2px}
+.viz .dwr{position:absolute;top:20px;bottom:20px;left:22px;width:44%;
+  background:linear-gradient(180deg,var(--saffron),#E07E1E);border-radius:2px;
+  transition:transform .95s cubic-bezier(.32,.72,.3,1);
+  box-shadow:0 3px 12px rgba(0,0,0,.45)}
+.viz .dwr::after{content:"";position:absolute;right:7px;top:50%;
+  transform:translateY(-50%);width:12px;height:3px;border-radius:2px;
+  background:rgba(20,21,24,.5)}
+.card.open .viz .dwr{transform:translateX(58%)}
+.card.busy .viz .dwr{filter:saturate(.7)}
+
+.body{padding:13px 15px;display:flex;flex-direction:column;gap:12px;flex:1}
+.tools{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);
+       border-radius:var(--r);overflow:hidden}
+.tools div{display:flex;gap:10px;align-items:baseline;padding:7px 11px;
+           border-bottom:1px solid var(--line);font-size:.8rem}
+.tools div:last-child{border-bottom:0}
+.tools b{font-family:var(--mono);font-size:.66rem;color:var(--saffron);
+         letter-spacing:.06em;min-width:20px}
+.tools span{flex:1;color:var(--paper)}
+.tools em{font-family:var(--mono);font-size:.66rem;color:var(--ash);
+          font-style:normal}
+.meta{display:flex;justify-content:space-between;font-family:var(--mono);
+      font-size:.63rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash)}
+
+button.act{width:100%;padding:13px;border:0;border-radius:var(--r);
+  font:650 .82rem/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;transition:.14s;background:var(--saffron);color:var(--ink)}
+button.act:hover{filter:brightness(1.07)}
+button.act:active{transform:scale(.985)}
+button.act.shut{background:transparent;color:var(--paper);
+                border:1px solid var(--line)}
+button.act:disabled{opacity:.45;cursor:not-allowed;transform:none}
+button.act:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+
+/* ── log + calibration ────────────────────────────────────────────────── */
+section{margin-top:22px}
+.shead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.shead h2{margin:0;font-size:.72rem;font-weight:600;letter-spacing:.18em;
+          text-transform:uppercase;color:var(--ash);font-family:var(--mono)}
+.shead .grow{flex:1}
+.mini{background:none;border:1px solid var(--line);color:var(--ash);
+      font:500 .6rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+      padding:6px 10px;border-radius:var(--r);cursor:pointer}
+.mini:hover{color:var(--paper);border-color:var(--steel)}
+.log{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+     background:var(--panel)}
+.log div{display:grid;grid-template-columns:76px 96px 1fr;gap:10px;
+  padding:7px 12px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:.68rem;align-items:baseline}
+.log div:last-child{border-bottom:0}
+.log .t{color:var(--ash)}
+.log .w{font-weight:600;letter-spacing:.06em}
+.log .w.OPENED{color:var(--saffron)} .log .w.CLOSED{color:var(--ash)}
+.log .w.UNLOCKED{color:var(--ok)} .log .w.LOCKED{color:var(--ash)}
+.log .w[class*="REJECT"]{color:var(--ember)}
+.log .d{color:var(--steel)}
+.empty{padding:16px 12px;color:var(--steel);font-family:var(--mono);
+       font-size:.68rem;text-align:center}
+
+.cal{display:none;background:var(--panel);border:1px solid var(--line);
+     border-radius:var(--r);padding:13px 15px;gap:12px;flex-direction:column}
+.cal.show{display:flex}
+.cal .row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.cal label{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;
+           text-transform:uppercase;color:var(--ash);min-width:82px}
+.cal input[type=range]{flex:1;min-width:150px;accent-color:var(--saffron)}
+.cal output{font-family:var(--mono);font-size:.72rem;min-width:62px;
+            text-align:right;color:var(--saffron)}
+.note{color:var(--steel);font-size:.74rem;line-height:1.45}
+.note b{color:var(--warn);font-weight:600}
+
+.foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);
+      display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+      font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--steel)}
+.hide{display:none!important}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+      <path d="M6 30 L20 6 L34 30 Z" fill="none" stroke="#FF9933" stroke-width="2.4"
+            stroke-linejoin="round"/>
+      <path d="M13 30 L20 18 L27 30 Z" fill="#FF5533"/>
+    </svg>
+    <div>
+      <div class="eyebrow">Ommi Forge</div>
+      <h1>shopkeeper <span>NANO</span></h1>
+    </div>
+    <div class="grow"></div>
+    <div class="pill" id="net">&mdash;</div>
+    <div class="pill shut" id="lockpill">Locked</div>
+  </div>
+
+  <!-- ── lock ──────────────────────────────────────────────────────────── -->
+  <div id="lock" class="lock">
+    <h2>Enter access PIN</h2>
+    <p>Every drawer movement is recorded against this session.</p>
+    <div class="dots" id="dots"><i></i><i></i><i></i><i></i></div>
+    <div class="pad" id="pad"></div>
+  </div>
+
+  <!-- ── console ───────────────────────────────────────────────────────── -->
+  <div id="console" class="hide">
+    <div class="grid" id="grid"></div>
+
+    <section>
+      <div class="shead">
+        <h2>Activity</h2><div class="grow"></div>
+        <button class="mini" id="clear">Clear</button>
+        <button class="mini" id="calbtn">Calibrate</button>
+        <button class="mini" id="lockbtn">Lock</button>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <div class="foot">
+      <span id="uptime">&mdash;</span>
+      <span id="mem">&mdash;</span>
+      <span>m1.25 &times; 16T &middot; 31.4 mm</span>
+    </div>
+  </div>
+</div>
+
+<script>
+var S = null, entry = "", polling = null;
+
+function api(path, opts) {
+  return fetch(path, opts).then(function (r) {
+    return r.json().then(function (j) { j._code = r.status; return j; });
+  });
+}
+function post(path, body) {
+  return api(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                     body: JSON.stringify(body || {}) });
+}
+
+/* ── keypad ─────────────────────────────────────────────────────────────── */
+var pad = document.getElementById("pad");
+["1","2","3","4","5","6","7","8","9","CLR","0","OK"].forEach(function (k) {
+  var b = document.createElement("button");
+  b.textContent = k;
+  if (k === "CLR" || k === "OK") b.className = "aux";
+  b.onclick = function () { key(k); };
+  pad.appendChild(b);
+});
+function drawDots(bad) {
+  var d = document.getElementById("dots");
+  d.className = "dots" + (bad ? " bad" : "");
+  [].forEach.call(d.children, function (i, n) {
+    i.className = n < entry.length ? "on" : "";
+  });
+}
+function key(k) {
+  if (k === "CLR") { entry = ""; drawDots(false); return; }
+  if (k === "OK") { submit(); return; }
+  if (entry.length < 8) { entry += k; drawDots(false); }
+  if (entry.length === 4) setTimeout(submit, 130);
+}
+function submit() {
+  if (!entry) return;
+  var pin = entry;
+  post("/api/unlock", { pin: pin }).then(function (r) {
+    entry = "";
+    if (r.ok) { drawDots(false); refresh(); }
+    else { drawDots(true); setTimeout(function () { drawDots(false); }, 420); }
+  });
+}
+document.addEventListener("keydown", function (e) {
+  if (!S || !S.locked) return;
+  if (e.key >= "0" && e.key <= "9") key(e.key);
+  else if (e.key === "Enter") key("OK");
+  else if (e.key === "Backspace") key("CLR");
+});
+
+/* ── render ─────────────────────────────────────────────────────────────── */
+function fmtUp(s) {
+  s = Math.max(0, s | 0);
+  var h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0;
+  return h ? h + "h " + m + "m" : m ? m + "m " + (s % 60) + "s" : s + "s";
+}
+function drawerCard(d) {
+  var rows = d.tools.map(function (t) {
+    return '<div><b>' + t.slot + '</b><span>' + t.tool + '</span><em>' + t.code + '</em></div>';
+  }).join("");
+  return '' +
+    '<div class="card' + (d.open ? " open" : "") + (d.busy ? " busy" : "") + '" data-id="' + d.id + '">' +
+      '<header><h3>' + d.name + '</h3><div class="grow"></div>' +
+        '<div class="pill' + (d.open ? " live" : "") + '">' +
+          (d.busy ? "Moving" : d.open ? "Open" : "Closed") + '</div></header>' +
+      '<div class="viz"><div class="case"></div><div class="dwr"></div></div>' +
+      '<div class="body">' +
+        '<div class="tools">' + rows + '</div>' +
+        '<div class="meta"><span>' + d.travel_mm + ' mm travel</span>' +
+          '<span>' + d.closed_us + '&ndash;' + d.open_us + ' &micro;s</span></div>' +
+        '<button class="act' + (d.open ? " shut" : "") + '"' + (d.busy ? " disabled" : "") + '>' +
+          (d.busy ? "Working" : d.open ? "Close drawer" : "Open drawer") + '</button>' +
+      '</div></div>';
+}
+function render() {
+  var locked = S.locked;
+  document.getElementById("lock").classList.toggle("hide", !locked);
+  document.getElementById("console").classList.toggle("hide", locked);
+  var lp = document.getElementById("lockpill");
+  lp.textContent = locked ? "Locked" : "Unlocked";
+  lp.className = "pill " + (locked ? "shut" : "live");
+  if (locked) return;
+
+  document.getElementById("grid").innerHTML = S.drawers.map(drawerCard).join("");
+  [].forEach.call(document.querySelectorAll(".card"), function (c) {
+    var id = +c.dataset.id, d = S.drawers[id];
+    var b = c.querySelector("button.act");
+    if (b) b.onclick = function () {
+      b.disabled = true; b.textContent = "Working";
+      c.classList.add("busy");
+      post("/api/drawer", { id: id, open: !d.open }).then(function () {
+        setTimeout(refresh, 260);
+      });
+    };
+  });
+
+  var log = document.getElementById("log");
+  log.innerHTML = S.log.length ? S.log.map(function (e) {
+    /* age, not absolute time: the cabinet has no RTC, so "4m ago" is the only
+       honest thing it can say */
+    return '<div><span class="t">' + fmtUp(S.uptime - e.up) + ' ago</span>' +
+           '<span class="w ' + e.what.replace(/\s/g, "") + '">' + e.what + '</span>' +
+           '<span class="d">' + (e.drawer === null || e.drawer === undefined ? "" :
+             (S.drawers[e.drawer] ? S.drawers[e.drawer].name : "")) +
+             (e.detail ? " &middot; " + e.detail : "") + '</span></div>';
+  }).join("") : '<div class="empty">no activity yet</div>';
+
+  document.getElementById("uptime").textContent = "up " + fmtUp(S.uptime);
+  document.getElementById("mem").textContent = (S.mem / 1024 | 0) + " KiB free";
+  buildCal();
+}
+
+/* ── calibration ────────────────────────────────────────────────────────── */
+var calOpen = false;
+document.getElementById("calbtn").onclick = function () {
+  calOpen = !calOpen;
+  document.getElementById("cal").classList.toggle("show", calOpen);
+  if (calOpen) buildCal();
+};
+function buildCal() {
+  if (!calOpen) return;
+  var el = document.getElementById("cal");
+  if (el.dataset.built === "1") return;
+  el.dataset.built = "1";
+  el.innerHTML = S.drawers.map(function (d) {
+    return '<div class="row"><label>' + d.name + ' shut</label>' +
+      '<input type="range" min="500" max="2500" step="10" value="' + d.closed_us +
+      '" data-id="' + d.id + '" data-k="closed_us"><output>' + d.closed_us + ' &micro;s</output></div>' +
+      '<div class="row"><label>' + d.name + ' open</label>' +
+      '<input type="range" min="500" max="2500" step="10" value="' + d.open_us +
+      '" data-id="' + d.id + '" data-k="open_us"><output>' + d.open_us + ' &micro;s</output></div>';
+  }).join("") +
+  '<p class="note">Dragging jogs the servo live so you can watch the drawer. ' +
+  'Endpoints are saved to flash on release. <b>Stop before the drawer strains:</b> ' +
+  'the mechanism has 31.4 mm of travel at a full 180&deg;, and most SG90s stall ' +
+  'against their own end stop before they get there.</p>';
+  [].forEach.call(el.querySelectorAll("input"), function (r) {
+    var out = r.nextElementSibling;
+    r.oninput = function () {
+      out.innerHTML = r.value + " &micro;s";
+      post("/api/cal", { id: +r.dataset.id, jog_us: +r.value });
+    };
+    r.onchange = function () {
+      var b = {}; b.id = +r.dataset.id; b[r.dataset.k] = +r.value;
+      post("/api/cal", b).then(function () { setTimeout(refresh, 200); });
+    };
+  });
+}
+
+document.getElementById("lockbtn").onclick = function () {
+  post("/api/lock").then(refresh);
+};
+document.getElementById("clear").onclick = function () {
+  api("/api/log", { method: "DELETE" }).then(refresh);
+};
+
+/* ── poll ───────────────────────────────────────────────────────────────── */
+function refresh() {
+  return api("/api/state").then(function (j) {
+    S = j;
+    document.getElementById("net").textContent = "online";
+    document.getElementById("net").className = "pill live";
+    render();
+  }).catch(function () {
+    document.getElementById("net").textContent = "offline";
+    document.getElementById("net").className = "pill shut";
+  });
+}
+refresh();
+setInterval(function () {
+  /* Only poll while something can change. A drawer mid-move needs a fast tick;
+     an idle unlocked cabinet does not, and the ESP has better things to do. */
+  var moving = S && S.drawers && S.drawers.some(function (d) { return d.busy; });
+  if (moving || !S || S.locked) refresh();
+}, 1400);
+setInterval(refresh, 5000);
+</script>
+</body></html>
