@@ -27,7 +27,7 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=94.0, ch=62.0, wall=2.0, floor_t=1.4,
+    cw=92.0, cd=74.0, ch=62.0, wall=2.0, floor_t=1.4,
     deck_z=34.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
@@ -177,11 +177,11 @@ def case_lower():
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
     # ── ESP32-S3 DevKit ON ITS BREADBOARD, behind the servos ──
-    # Measured assembly: 81.5 long x ~52 across x ~15 tall, board plugged into
+    # Measured assembly: 81.5 long x 35.5 across x ~15 tall, board plugged into
     # two breadboard strips. No soldering, so the breadboard stays in the case
     # and the case grew backwards to take it: 66 -> 94 deep.
-    EX, EY = CW/2, CD - 32.0
-    EBW, EBL, EBT = 52.0, 81.5, 1.6
+    EX, EY = CW/2, CD - 23.0
+    EBW, EBL, EBT = 35.5, 81.5, 1.6   # measured off the real assembly
     FT = P["floor_t"]
     for sgn in (-1, 1):
         yy = EY + sgn*(EBW/2 + 1.5)
@@ -206,7 +206,7 @@ def case_lower():
             m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
-    keep+= [(CW/2, CD-32.0, 52.0)]
+    keep+= [(CW/2, CD-23.0, 46.0)]
     gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
     for i in range(gx+1):
         for j in range(gy+1):

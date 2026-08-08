@@ -13,8 +13,8 @@ CONT = ("/Users/piyushmishra/Desktop/toolcell/.superpowers/brainstorm/"
         "25158-1786171087/content")
 sys.path.insert(0, HERE)
 
-CW, CD, WL, FT = 92.0, 94.0, 2.0, 1.4
-EX, EY, EBW, EBL = CW/2, CD-32.0, 52.0, 81.5
+CW, CD, WL, FT = 92.0, 74.0, 2.0, 1.4
+EX, EY, EBW, EBL = CW/2, CD-23.0, 35.5, 81.5
 SG_L, SG_W, SG_TAB, CLR = 22.8, 12.2, 32.2, 0.35
 DR_W = (CW-2*WL-6.0-2*1.2)/2
 DR_X = (WL+1.2, WL+1.2+DR_W+6.0)
@@ -97,14 +97,12 @@ Green = the ESP32-S3 + breadboard channel. Everything is drawn from the shipped 
 <tr><th>Mount</th><th>Holds</th><th>Fit per side</th><th>How it is held</th></tr>
 <tr><td>Servo cradle &times;2</td><td>SG90 22.8 &times; 12.2</td><td><b>+0.35 mm</b></td>
     <td>drops in from above; cradle spans 36.2 mm so both M2 tab screws land on it</td></tr>
-<tr><td>ESP channel</td><td>S3 DevKit on breadboard 81.5 &times; 52</td><td><b>+0.35 mm</b></td>
+<tr><td>ESP channel</td><td>S3 DevKit on breadboard 81.5 &times; 35.5</td><td><b>+0.35 mm</b></td>
     <td>breadboard adhesive back; corner walls locate it</td></tr>
 <tr><td>Pinion pocket &times;2</td><td>&#8709;22.5 gear</td><td>+1.25 mm</td>
     <td>free clearance, gear must never touch the case</td></tr>
 </table>
-<p class="s" style="margin-top:14px"><b>No breadboard.</b> A half-size board plus a 55 &times; 28 DevKit plus
-two servos does not fit 92 &times; 66 &mdash; the pillars landed on both servos. The DevKit's own
-headers take dupont leads directly. A breadboard needs the case to grow.</p>
+<p class="s" style="margin-top:14px"><b>The breadboard stays in.</b> Measured 81.5 &times; 35.5, it sits behind the servos under the deck, where 34.5 mm of height was doing nothing. Case went 66 &rarr; 74 deep to give it margin rather than the 0.9 mm it would have had at 66.</p>
 </div>
 """
 out = os.path.join(CONT, "mounts.html")
