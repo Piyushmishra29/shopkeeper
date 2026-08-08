@@ -24,9 +24,9 @@ WL, SC   = 2.0, 1.2
 FLOOR_T  = 1.4
 DECK_Z, DECK_T = 34.5, 2.5
 DECK     = DECK_Z + DECK_T           # 35.5
-CW, CD   = 92.0, 66.0
+CW, CD   = 92.0, 94.0
 MID_GAP  = 6.0
-DR_D     = CD - WL - 9.0
+DR_D     = 55.0
 DR_W     = (CW - 2*WL - MID_GAP - 2*SC) / 2
 DR_X     = (WL + SC, WL + SC + DR_W + MID_GAP)
 M, TEETH = 1.25, 16
@@ -70,7 +70,7 @@ drawer0 = L("drawer"); rack0 = L("rack")
 import nano as NA                                   # reuse the authoring pose
 rack_asm = NA.rack(assembly=True)
 
-y_closed = (CD - WL - 1.2) - drawer0.extents[1]
+y_closed = 7.8
 
 def drawer_at(slot, pull):
     dx = DR_X[slot]

@@ -13,8 +13,8 @@ CONT = ("/Users/piyushmishra/Desktop/toolcell/.superpowers/brainstorm/"
         "25158-1786171087/content")
 sys.path.insert(0, HERE)
 
-CW, CD, WL, FT = 92.0, 66.0, 2.0, 1.4
-EX, EY, EBW, EBL = CW/2, CD-20.0, 28.6, 55.4
+CW, CD, WL, FT = 92.0, 94.0, 2.0, 1.4
+EX, EY, EBW, EBL = CW/2, CD-32.0, 52.0, 81.5
 SG_L, SG_W, SG_TAB, CLR = 22.8, 12.2, 32.2, 0.35
 DR_W = (CW-2*WL-6.0-2*1.2)/2
 DR_X = (WL+1.2, WL+1.2+DR_W+6.0)
@@ -83,12 +83,12 @@ html = f"""<style>
 <div class="mp">
 <h2>MECH BAY &mdash; plan section at z = 6 mm</h2>
 <p class="s">Grey outline is a slice of the real <code>case_lower.stl</code>. Yellow = the two SG90 cradles.
-Green = the ESP32-WROOM-32D channel. Everything is drawn from the shipped mesh.</p>
+Green = the ESP32-S3 + breadboard channel. Everything is drawn from the shipped mesh.</p>
 <svg viewBox="0 0 {W_:.0f} {H_:.0f}">
   <path d="{path(mech)}" fill="rgba(138,138,138,.20)" stroke="#8a8a8a" stroke-width="1.6" fill-rule="evenodd"/>
   {"".join(sv)}
   {rect(EX-EBL/2, EY-EBW/2, EBL, EBW, fill="rgba(63,168,122,.22)", stroke="#3fa87a", stroke_width="1.6")}
-  {label(EX, EY+2, "ESP32-WROOM-32D", "#4fd18b", 12, "middle")}
+  {label(EX, EY+2, "ESP32-S3 + breadboard", "#4fd18b", 12, "middle")}
   {label(EX, EY-3.5, f"{EBL:.1f} x {EBW:.1f}", "#4fd18b", 10.5, "middle")}
   {label(EX+EBL/2+2, EY-EBW/2-4, "micro-USB &rarr; rear window", "#4fd18b", 10, "end")}
   {label(2, CD+3, f"case_lower {CW:.0f} x {CD:.0f} mm", "#8a8a8a", 11)}
@@ -97,8 +97,8 @@ Green = the ESP32-WROOM-32D channel. Everything is drawn from the shipped mesh.<
 <tr><th>Mount</th><th>Holds</th><th>Fit per side</th><th>How it is held</th></tr>
 <tr><td>Servo cradle &times;2</td><td>SG90 22.8 &times; 12.2</td><td><b>+0.35 mm</b></td>
     <td>drops in from above; cradle spans 36.2 mm so both M2 tab screws land on it</td></tr>
-<tr><td>ESP channel</td><td>WROOM-32D 54.4 &times; 27.9</td><td><b>+0.35 mm</b></td>
-    <td>DevKitC has no mounting holes &mdash; walls plus a dab of glue</td></tr>
+<tr><td>ESP channel</td><td>S3 DevKit on breadboard 81.5 &times; 52</td><td><b>+0.35 mm</b></td>
+    <td>breadboard adhesive back; corner walls locate it</td></tr>
 <tr><td>Pinion pocket &times;2</td><td>&#8709;22.5 gear</td><td>+1.25 mm</td>
     <td>free clearance, gear must never touch the case</td></tr>
 </table>

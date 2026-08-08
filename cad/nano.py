@@ -27,7 +27,7 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=66.0, ch=62.0, wall=2.0, floor_t=1.4,
+    cw=92.0, cd=94.0, ch=62.0, wall=2.0, floor_t=1.4,
     deck_z=34.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
@@ -36,6 +36,7 @@ P = dict(
     fin_t=3.0, fin_h=8.0,
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
     clear=0.35, gap=0.8,
+    dr_d=55.0,               # drawer depth, now independent of case depth
     pull="cut",              # "cut" = scalloped finger pull, "knob" = press-fit knob
 )
 M, N   = P["module"], P["teeth"]
@@ -48,7 +49,8 @@ FIN_SPAN = P["fin_t"] + TOOTH_H
 
 CW, CD, CH, WL = P["cw"], P["cd"], P["ch"], P["wall"]
 DECK   = P["deck_z"] + P["deck_t"]              # 28
-DR_D   = CD - WL - 9.0                          # 55
+DR_D   = P["dr_d"]     # decoupled: the case got deeper for the breadboard,
+                       # the drawer did not - extra depth is electronics bay
 DR_TOP = DECK + P["dr_h"]                       # 46
 # two drawers across the internal width
 INNER  = CW - 2*WL
@@ -174,20 +176,19 @@ def case_lower():
                      P["floor_t"]-1,P["floor_t"]+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
-    # ── ESP32-WROOM-32D DevKit cradle ──
-    # Board is 54.4 x 27.9 x 1.6. These DevKitC/NodeMCU boards have no
-    # mounting holes at all, so it is a channel, not posts: it drops between
-    # two walls and a dab of glue holds it. Micro-USB end faces the rear
-    # window so it can be reflashed with the case shut.
-    EX, EY = CW/2, CD - 20.0   # 20 not 16: the wider board's wall broke the rear face
-    EBW, EBL, EBT = 28.6, 55.4, 1.6
+    # ── ESP32-S3 DevKit ON ITS BREADBOARD, behind the servos ──
+    # Measured assembly: 81.5 long x ~52 across x ~15 tall, board plugged into
+    # two breadboard strips. No soldering, so the breadboard stays in the case
+    # and the case grew backwards to take it: 66 -> 94 deep.
+    EX, EY = CW/2, CD - 32.0
+    EBW, EBL, EBT = 52.0, 81.5, 1.6
     FT = P["floor_t"]
     for sgn in (-1, 1):
-        yy = EY + sgn*(EBW/2 + 1.4)
-        # plain channel walls, no undercut lip. The lip's underside was 255 mm2
-        # of unsupported area on its own; the board is held by the walls and a
-        # dab of glue, which is all a demo needs.
-        m=union([m,blk(EX-EBL/2-1.0, EX+EBL/2+1.0, yy-1.4, yy+1.4, FT, FT+4.0)])
+        yy = EY + sgn*(EBW/2 + 1.5)
+        # low corner walls only - the breadboard's adhesive back does the
+        # holding, these just locate it and stop it sliding
+        m=union([m,blk(EX-EBL/2-1.5, EX-EBL/2+12.0, yy-1.5, yy+1.5, FT, FT+3.5)])
+        m=union([m,blk(EX+EBL/2-12.0, EX+EBL/2+1.5, yy-1.5, yy+1.5, FT, FT+3.5)])
     # end stop at the front, open at the rear so the USB-C is reachable
     m=union([m,blk(EX-EBL/2-1.0, EX-EBL/2+1.0, EY-EBW/2-1.4, EY+EBW/2+1.4,
                    FT, FT+5.2)])
@@ -205,7 +206,7 @@ def case_lower():
             m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
-    keep+= [(CW/2, CD-20.0, 40.0)]
+    keep+= [(CW/2, CD-32.0, 52.0)]
     gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
     for i in range(gx+1):
         for j in range(gy+1):
@@ -347,7 +348,8 @@ def chk(l,c,d):
     if not c: fails.append(l)
 
 d0=parts["drawer"]
-y_closed=(CD-WL-1.2)-d0.extents[1]
+Y_CLOSED=7.8           # drawer sits this far back so the pinion has room
+y_closed=Y_CLOSED
 # assembly pose: drawer floor on the deck, rack flipped blade-down through it
 # the case is three parts now; assemble them for the interference sweep
 _lo=parts["case_lower"].copy()
