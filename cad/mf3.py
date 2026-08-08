@@ -19,15 +19,22 @@ RELS = ('<?xml version="1.0" encoding="UTF-8"?>\n'
         '</Relationships>')
 
 
-def write_3mf(path, items):
-    """items: list of (name, mesh, x, y). Mesh must already sit at z=0."""
+def write_3mf(path, items, materials=None):
+    """items: (name, mesh, x, y) or (name, mesh, x, y, material_index).
+    materials: list of (name, "#RRGGBBAA"). Mesh must already sit at z=0."""
     res, build = [], []
-    for i, (name, m, tx, ty) in enumerate(items, start=1):
+    mat = ""
+    if materials:
+        bases = "".join(f'<base name="{n}" displaycolor="{c}"/>' for n, c in materials)
+        mat = f'<basematerials id="100">{bases}</basematerials>'
+    for i, it in enumerate(items, start=1):
+        name, m, tx, ty = it[0], it[1], it[2], it[3]
+        pa = f' pid="100" pindex="{it[4]}"' if (materials and len(it) > 4) else ""
         v = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>'
                     for a, b, c in m.vertices)
         t = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>'
                     for a, b, c in m.faces)
-        res.append(f'<object id="{i}" type="model" name="{name}">'
+        res.append(f'<object id="{i}" type="model" name="{name}"{pa}>'
                    f'<mesh><vertices>{v}</vertices>'
                    f'<triangles>{t}</triangles></mesh></object>')
         build.append(f'<item objectid="{i}" '
@@ -36,7 +43,7 @@ def write_3mf(path, items):
            '<model unit="millimeter" xml:lang="en-US" '
            'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
            '<metadata name="Application">ToolCell generator</metadata>'
-           f'<resources>{"".join(res)}</resources>'
+           f'<resources>{mat}{"".join(res)}</resources>'
            f'<build>{"".join(build)}</build></model>')
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CT)

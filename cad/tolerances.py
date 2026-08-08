@@ -88,8 +88,14 @@ fit("drawer under case top", P["dr_h"], P["dr_h"] + P["gap"],
 # ── gears ─────────────────────────────────────────────────────────────
 val("gear backlash", P["backlash"], 0.10*M, 0.20*M, "gear",
     f"module {M}")
-val("tooth thickness at pitch line", PITCH/2 - P["backlash"],
-    3*NOZZLE, 99.0, "printability", "needs >= 3 extrusion widths")
+PRESS=math.radians(14.5)
+_hp=(PITCH/2-P["backlash"])/2
+val("tooth thickness at pitch line", 2*_hp, 3*NOZZLE, 99.0,
+    "printability", "needs >= 3 extrusion widths")
+val("tooth thickness at tip", 2*(_hp-M*math.tan(PRESS)), 2*NOZZLE, 99.0,
+    "printability", "thin tips shear off")
+val("trough width at root", PITCH-2*(_hp+1.25*M*math.tan(PRESS)),
+    2*NOZZLE, 99.0, "printability", "nozzle must fit between teeth")
 val("tooth height", TOOTH_H, 4*0.2, 99.0, "printability",
     "layers at 0.2 mm")
 val("rack blade thickness", P["fin_t"], 2.5*NOZZLE, 99.0, "printability",

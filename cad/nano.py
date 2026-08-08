@@ -31,7 +31,7 @@ P = dict(
     deck_z=25.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=2.0,
-    module=1.25, teeth=12, press=math.radians(20.0),
+    module=1.25, teeth=12, press=math.radians(14.5),
     gear_t=5.0, backlash=0.30,
     fin_t=3.0, fin_h=8.0,
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
@@ -116,10 +116,13 @@ def rack_fin(length,h=None):
     base=blk(0,t,0,length,0,h); tt=[]
     for i in range(int(length/PITCH)):
         yc=(i+0.5)*PITCH
-        top=(PITCH/2-P["backlash"])/2
-        bot=top+TOOTH_H*math.tan(P["press"])
+        # half-thickness is defined at the PITCH LINE, which sits one addendum
+        # below the tip - not at the tip itself
+        hp  = (PITCH/2-P["backlash"])/2
+        tip = hp - M*math.tan(P["press"])
+        rt  = hp + 1.25*M*math.tan(P["press"])
         tt.append(extrude_polygon(Polygon(
-            [(t,yc-bot),(t+TOOTH_H,yc-top),(t+TOOTH_H,yc+top),(t,yc+bot)]),h))
+            [(t,yc-rt),(t+TOOTH_H,yc-tip),(t+TOOTH_H,yc+tip),(t,yc+rt)]),h))
     return union([base]+tt)
 
 LEDGE=3.0
@@ -357,6 +360,11 @@ def land(m):
 dd,rk2,pn=(land(parts["drawer"]),land(parts["rack"]),land(parts["pinion"]))
 c=land(parts["case_lower"])
 BED=256.0
+# white shell, yellow everything that moves
+MATS=[("white","#F2F2F2FF"),("yellow","#F2B705FF")]
+COL={"case_lower":0,"case_upper":0,
+     "deck":1,"drawer_A":1,"drawer_B":1,"rack_A":1,"rack_B":1,
+     "pinion_1":1,"pinion_2":1,"knob_A":1,"knob_B":1}
 x,y,row=6.0,6.0,c.extents[1]
 L=[("case_lower",c,6,6)]
 x=6+c.extents[0]+6
@@ -378,7 +386,8 @@ for nm,mm in _items:
     if x+mm.extents[0] > BED-6:            # wrap, or the plate silently overruns
         x=6.0; y+=row+6.0; row=0.0
     L.append((nm,mm,x,y)); x+=mm.extents[0]+5; row=max(row,mm.extents[1])
-p=os.path.join(PL,"plate_nano.3mf"); write_3mf(p,L); o,b=verify(p)
+LC=[(n,m,px,py,COL.get(n,0)) for n,m,px,py in L]
+p=os.path.join(PL,"plate_nano.3mf"); write_3mf(p,LC,materials=MATS); o,b=verify(p)
 w=max(x+m.extents[0] for _,m,x,y in L); h=max(y+m.extents[1] for _,m,x,y in L)
 assert w<=BED and h<=BED, f"plate {w:.0f}x{h:.0f} exceeds the {BED:.0f} mm bed"
 print(f"  ONE plate {w:.0f} x {h:.0f} mm, {len(L)} objects, ok={o==b}")
