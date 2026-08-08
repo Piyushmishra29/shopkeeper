@@ -161,16 +161,26 @@ chk("rack/pinion centre distance", abs(centre - NA.CDIST) < 0.05,
 
 # The pinion's height is NOT free - it is set by the servo it sits on. This
 # used to be hard-coded at FLOOR_T+27 and "passed" on 4.4 mm of a 5.0 face.
-gear_t = float(pin.extents[2])
-pin_z0, pin_z1 = SG_HORN, SG_HORN + gear_t
+# The pinion's origin is the GEAR's underside; with a spline hub it also grows
+# a boss DOWNWARD to reach the servo's spline, so the part's total height is no
+# longer the gear's height. Take both from the mesh's own bounds rather than
+# assuming the part starts at z=0 and goes up.
+gear_t = NA.P["gear_t"]
+pin_z0, pin_z1 = SG_HORN, SG_HORN + gear_t          # the teeth, which is what meshes
+part_lo = SG_HORN + float(pin.bounds[0][2])         # boss bottom
+part_hi = SG_HORN + float(pin.bounds[1][2])         # whole part
 rack_z0, rack_z1 = rack_asm.bounds[0][2], rack_asm.bounds[1][2]
 rack_z0 += DECK + DR_FLOOR + 0.2; rack_z1 += DECK + DR_FLOOR + 0.2
 ov = min(rack_z1, pin_z1) - max(rack_z0, pin_z0)
 chk("pinion/rack vertical overlap", ov >= gear_t - 0.01,
     f"{ov:.2f} of {gear_t:.2f} mm face  (rack {rack_z0:.1f}-{rack_z1:.1f}, "
     f"pinion {pin_z0:.1f}-{pin_z1:.1f})")
-chk("pinion clears the deck underside", pin_z1 <= DECK - DECK_T - 0.3,
-    f"pinion top {pin_z1:.1f}, deck underside {DECK-DECK_T:.1f}")
+chk("pinion clears the deck underside", part_hi <= DECK - DECK_T - 0.3,
+    f"whole part tops out at {part_hi:.1f}, deck underside {DECK-DECK_T:.1f}")
+chk("pinion boss clears the servo body", part_lo >= SG_BASE + SG_H + 0.2,
+    f"boss bottom {part_lo:.1f}, servo body top {SG_BASE+SG_H:.1f}")
+chk("pinion boss clears the electronics", part_lo >= FLOOR_T + NA.P["esp_h"] + 0.4,
+    f"boss bottom {part_lo:.1f}, stack top {FLOOR_T+NA.P['esp_h']:.1f}")
 chk("rack blade clears the electronics",
     rack_z0 >= FLOOR_T + NA.P["esp_h"] + 1.5,
     f"blade bottom {rack_z0:.1f}, stack top {FLOOR_T+NA.P['esp_h']:.1f}")
