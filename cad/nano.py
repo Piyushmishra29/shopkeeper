@@ -36,7 +36,8 @@ P = dict(
     fin_t=3.0, fin_h=8.0,
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
     clear=0.35, gap=0.8,
-    dr_d=55.0,               # drawer depth, now independent of case depth
+    dr_d=55.0,
+    esp_h=27.0,              # ESP32-S3 on its breadboard, pins connected               # drawer depth, now independent of case depth
     pull="cut",              # "cut" = scalloped finger pull, "knob" = press-fit knob
 )
 M, N   = P["module"], P["teeth"]
@@ -395,6 +396,9 @@ chk("fin still keyed in the deck slot",fin_in_slot>=20.0,
 chk("drawer still supported by the deck",DR_D-TRAVEL>=20.0,
     f"{DR_D-TRAVEL:.1f} of {DR_D:.1f} mm still on the deck")
 chk("servo fits under the deck",P["sg_h"]+WL<=P["deck_z"],f"{P['sg_h']+WL:.1f} of {P['deck_z']:.1f}")
+chk("ESP+breadboard clears the deck",
+    P["floor_t"]+P["esp_h"] <= P["deck_z"]-1.0,
+    f"stack top {P['floor_t']+P['esp_h']:.1f}, deck underside {P['deck_z']:.1f}")
 chk("the two servos do not clash",
     (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),
     f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
