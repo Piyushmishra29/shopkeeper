@@ -26,42 +26,36 @@ OUT  = os.path.normpath(os.path.join(
     "content", "viewer3d.html"))
 
 # ────────────────────────────────────────────────────────────────────────────
-# 1.  Parameters — copied verbatim from cad/nano.py
+# 1.  Parameters — lifted live out of cad/nano.py
+#
+# nano.py is a script, not a module: importing it would re-run every boolean
+# and re-export every STL. So instead we slice out its parameter block (the
+# `P = dict(...)` through `PIN_Y`, plus the rack constants) and exec just that.
+# Nothing is duplicated here, so the viewer cannot drift out of step with the
+# geometry when someone edits deck_z or ch.
 # ────────────────────────────────────────────────────────────────────────────
-P = dict(
-    cw=92.0, cd=66.0, ch=60.0, wall=2.0, floor_t=1.4,
-    deck_z=33.0, deck_t=2.5,
-    dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
-    side_clear=1.2, mid_gap=6.0,
-    module=1.25, teeth=12, press=math.radians(14.5),
-    gear_t=5.0, backlash=0.30,
-    fin_t=3.0, fin_h=8.0,
-    sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
-    clear=0.35, gap=0.8,
-    pull="cut",
-)
-M, N   = P["module"], P["teeth"]
-R_P    = M*N/2
-R_TIP, R_ROOT = R_P+M, R_P-1.25*M
-PITCH  = math.pi*M
-TRAVEL = math.pi*R_P                              # 23.56 mm
-TOOTH_H  = 2.25*M
-FIN_SPAN = P["fin_t"] + TOOTH_H
+print("shopkeeper NANO — 3D viewer\n")
+NANO = os.path.join(HERE, "nano.py")
+_src = open(NANO, encoding="utf-8").read().splitlines()
 
-CW, CD, CH, WL = P["cw"], P["cd"], P["ch"], P["wall"]
-DECK   = P["deck_z"] + P["deck_t"]                # 35.5  top of the deck
-DR_D   = CD - WL - 9.0                            # 55
-DR_TOP = DECK + P["dr_h"]
-INNER  = CW - 2*WL
-DR_W   = (INNER - P["mid_gap"] - 2*P["side_clear"]) / 2
-DR_X   = (WL + P["side_clear"],
-          WL + P["side_clear"] + DR_W + P["mid_gap"])
-FIN_X  = DR_W * 0.30
-PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P
-PIN_Y  = 28.5
-RACK_L  = DR_D - 16
-RACK_Y0 = 8.0
+def _slice(first_prefix, last_prefix):
+    a = next(i for i, l in enumerate(_src) if l.startswith(first_prefix))
+    b = next(i for i, l in enumerate(_src) if i > a and l.startswith(last_prefix))
+    return "\n".join(_src[a:b + 1])
+
+_blk = (_slice("P = dict(", "PIN_Y ") + "\n"
+        + _slice("RACK_L ", "PEG_D "))
+_ns = {"math": math}
+exec(compile(_blk, NANO, "exec"), _ns)
+for _k in ("P", "M", "N", "R_P", "R_TIP", "R_ROOT", "PITCH", "TRAVEL", "TOOTH_H",
+           "FIN_SPAN", "CW", "CD", "CH", "WL", "DECK", "DR_D", "DR_TOP", "INNER",
+           "DR_W", "DR_X", "FIN_X", "PIN_DX", "PIN_Y", "RACK_L", "RACK_Y0", "PEG_D"):
+    assert _k in _ns, f"nano.py no longer defines {_k}"
+    globals()[_k] = _ns[_k]
+
 DENSITY = 1.27                                    # g/cm3, same figure nano.py prints
+print(f"  from nano.py:  case {CW:.0f} x {CD:.0f} x {CH:.0f}   deck top {DECK:.1f}   "
+      f"travel {TRAVEL:.2f}   drawers 2 x ({DR_W:.1f} x {DR_D:.1f} x {P['dr_h']:.1f})")
 
 # rack.stl was exported from rack(assembly=False) — print pose. These are the
 # analytic bounds of rack(assembly=True), the pose used in the sweep.
@@ -142,7 +136,6 @@ def quantise(m):
     assert vol > 0, "quantised mesh has inverted winding"
     return uniq, F, vol
 
-print("shopkeeper NANO — 3D viewer\n")
 geo, tris, grams = {}, {}, {}
 for n in NAMES:
     m = raw[n]
@@ -248,6 +241,7 @@ DATA = {
     "col":   COL,
     "travel": round(TRAVEL, 4),
     "rp":    R_P,
+    "cw":    CW, "cd": CD, "ch": CH,
     "fitA":  {"c": fitA_c, "r": fitA_r},
     "fitE":  {"c": fitE_c, "r": fitE_r},
     "bom":   {n: {"q": QTY[n], "g": round(grams[n], 2), "t": tris[n]} for n in NAMES},
@@ -357,7 +351,8 @@ CSS = r"""
 BODY = r"""
 <div class="v3d" id="v3d-root">
   <h2>shopkeeper NANO &mdash; the real meshes, in 3D</h2>
-  <p class="v3d-sub">Every triangle below comes out of the STLs in <code>nano/</code>.
+  <p class="v3d-sub"><b>__DIMS__ mm</b>, two motorised drawers.
+    Every triangle below comes out of the STLs in <code>nano/</code>.
     The poses are the ones <code>nano.py</code> uses for its boolean interference
     sweep, so what you are orbiting is exactly what was checked. Drag to orbit,
     scroll to zoom, and run the drawers out their full __TRAVEL__ mm of stroke &mdash;
@@ -392,7 +387,7 @@ BODY = r"""
       <div class="v3d-tot"><span>&approx; sliced</span><b>__SLICED__ g</b></div>
       <p class="v3d-note">White is plate 1, yellow plate 2 &mdash; one colour per plate,
         zero filament changes. Hover a row to isolate that part.
-        Closed, the drawer face sits 7.8&nbsp;mm inside the mouth; open, it stands
+        Closed, the drawer face sits __YCLOSED__&nbsp;mm inside the mouth; open, it stands
         __TRAVEL__&nbsp;mm proud of that. <code>nano.py</code> does not place the pinion,
         so its height here is derived: gear body against the blade, hub flush under
         the drawer floor.</p>
@@ -507,6 +502,7 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 
 /* ── main draw ────────────────────────────────────────────────────────── */
 var GRID_N = 9, GRID_S = 20;   /* 9 cells of 20 mm each way, minor every 10 */
+var FCW = D.cw, FCD = D.cd;    /* case footprint, straight from nano.py */
 
 function draw() {
   if (!W) resize();
@@ -554,7 +550,7 @@ function draw() {
     return true;
   }
   var pa = [0, 0], pb = [0, 0], i, j;
-  var gx0 = 46 - GRID_N * GRID_S / 2, gy0 = 33 - GRID_N * GRID_S / 2;
+  var gx0 = FCW / 2 - GRID_N * GRID_S / 2, gy0 = FCD / 2 - GRID_N * GRID_S / 2;
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(150,158,175,.13)';
   ctx.beginPath();
@@ -568,10 +564,10 @@ function draw() {
     }
   }
   ctx.stroke();
-  /* the 92 x 66 footprint */
+  /* the case footprint */
   ctx.strokeStyle = 'rgba(242,183,5,.30)';
   ctx.beginPath();
-  var fp = [[0, 0], [92, 0], [92, 66], [0, 66], [0, 0]], ok = true, first = true;
+  var fp = [[0, 0], [FCW, 0], [FCW, FCD], [0, FCD], [0, 0]], ok = true, first = true;
   for (i = 0; i < fp.length; i++) {
     if (!proj(fp[i][0], fp[i][1], 0, pa)) { ok = false; break; }
     if (first) { ctx.moveTo(pa[0], pa[1]); first = false; } else ctx.lineTo(pa[0], pa[1]);
@@ -833,6 +829,8 @@ requestAnimationFrame(tick);
 
 html = (CSS
         + BODY.replace("__TRAVEL__", f"{TRAVEL:.2f}")
+              .replace("__DIMS__", f"{CW:.0f} &times; {CD:.0f} &times; {CH:.0f}")
+              .replace("__YCLOSED__", f"{Y_CLOSED:.1f}")
               .replace("__ROWS__", ROWS)
               .replace("__TOTAL__", f"{TOTAL:.0f}")
               .replace("__SLICED__", f"{TOTAL*0.85:.0f}")

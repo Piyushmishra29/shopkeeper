@@ -418,8 +418,11 @@ for lab,col,items in PLATES:
     assert w<=BED and h<=BED, f"plate {lab} is {w:.0f}x{h:.0f}, bed is {BED:.0f}"
     g=sum(m.volume/1000*1.27 for _,m,_,_ in placed); total+=g
     path=os.path.join(PL,f"plate_{lab}.3mf")
-    write_3mf(path,[(n,m,px,py,0) for n,m,px,py in placed],
-              materials=[(lab.split("_")[1],col)])
+    # NO basematerials group. Declaring one makes Bambu treat the file as
+    # multi-material and refuse to slice until filaments are mapped - and on a
+    # single-nozzle machine there is nothing to map. The colour comes from
+    # whichever spool is loaded, not from the file.
+    write_3mf(path,[(n,m,px,py) for n,m,px,py in placed])
     o,b=verify(path)
     print(f"\n  plate_{lab:9s} {w:5.0f} x {h:3.0f} mm   {g:5.1f} g   "
           f"{len(placed)} objects  ok={o==b}")
