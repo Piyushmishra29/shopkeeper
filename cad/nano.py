@@ -309,8 +309,10 @@ def case_upper():
 
     # ── OMMI FORGE mark, debossed into the top face ──
     # case_upper prints top-face-down, so the mark's edges form against the
-    # bed - the crispest surface the machine makes. 0.7 deep; fill with a
-    # black paint pen. A colour change is not worth a purge tower on one nozzle.
+    # bed - the crispest surface the machine makes. No second colour: it is
+    # white PLA, same as the case. White-on-white reads as shadow, so it is
+    # cut 1.1 deep rather than 0.7 - deep enough to catch light. The top
+    # plate is 2.0, so 0.9 of material remains under it.
     g = _logo_trace()[0]
     LH = 11.0                                   # mark height on the part
     g = _sc(g, LH/0.772, LH/0.772, origin=(0, 0))
@@ -318,8 +320,8 @@ def case_upper():
     # the mark is 7 disjoint shapes and extrude_polygon takes ONE polygon
     cut = []
     for poly in (list(g.geoms) if hasattr(g, "geoms") else [g]):
-        e = extrude_polygon(poly, 0.9)
-        e.apply_translation([0, 0, H - 0.7])
+        e = extrude_polygon(poly, 1.6)   # must break the top surface, not stop under it
+        e.apply_translation([0, 0, H - 1.1])
         cut.append(e)
     m = diff(m, union(cut))
     return chamfer(m)
