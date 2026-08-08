@@ -89,6 +89,28 @@ def cyl_y(dia, y0, y1, x, z, s=48):
 def diff(a, b): return trimesh.boolean.difference([a, b], engine="manifold")
 def union(p):   return trimesh.boolean.union(p, engine="manifold")
 
+def chamfer_verticals(m, c=4.0):
+    """Knock the four vertical corners off. Costs nothing and is the single
+    biggest difference between "printed box" and "product" at a glance."""
+    s = c * math.sqrt(2)
+    cuts = []
+    for (x, y) in ((0, 0), (CW, 0), (0, CD), (CW, CD)):
+        b = box(extents=[s, s, 600])
+        b.apply_transform(trimesh.transformations.rotation_matrix(
+            math.pi / 4, [0, 0, 1]))
+        cuts.append(T(b, x, y, 0))
+    return diff(m, union(cuts))
+
+def vents(m, h, n=5):
+    """Louvre slots in both side walls of a module."""
+    for i in range(n):
+        z = 12 + i * 7.5
+        if z + 3 > h - 8:
+            break
+        for x in (-1, CW - WL - 1):
+            m = diff(m, blk(x, x + WL + 2, CD * 0.30, CD * 0.72, z, z + 3.2))
+    return m
+
 # ───────────────────── gear generation ─────────────────────
 def pinion(hub_top):
     """Straight-flank spur gear — the standard printed-gear approximation.
@@ -175,7 +197,13 @@ def case_base():
     m = diff(m, blk(60, 74, CD - WL - 1, CD + 1, 19, 33))
     # cable riser to the bay above
     m = diff(m, blk(CW - 34, CW - 14, CD - WL - 4, CD + 1, 30, P["h_base"] + 4))
-    return m
+    # tray mounting bosses in the floor
+    for x in (26, CW - 26):
+        for y in (26, CD - 30):
+            m = union([m, cyl_z(8.0, WL, WL + 4, x, y)])
+            m = diff(m, cyl_z(2.5, WL + 1, WL + 5, x, y))
+    m = vents(m, P["h_base"])
+    return chamfer_verticals(m)
 
 def case_mid():
     """Drawer bay. Floor carries the drawer; front is fully open."""
@@ -185,7 +213,7 @@ def case_mid():
     # SW1 boss: drawer-open detection, front-inside on the fixed shell
     m = union([m, blk(WL, WL + 12, WL + 2, WL + 16, WL, WL + 14)])
     m = diff(m, cyl_y(2.4, WL + 1, WL + 15, WL + 6, WL + 7))
-    return m
+    return chamfer_verticals(m)
 
 def case_head():
     """Control head. Keypad in the top, OLED in the front, tablet slot behind."""
@@ -207,7 +235,9 @@ def case_head():
     # OLED module mounting posts
     for dx in (-16, 16):
         m = union([m, blk(CW/2 + dx - 2, CW/2 + dx + 2, WL, WL + 5, 10, 28)])
-    return m
+    # cable pass-through from the bay below
+    m = diff(m, blk(CW - 34, CW - 14, CD - WL - 4, CD + 1, -1, 18))
+    return chamfer_verticals(m)
 
 def elec_panel():
     p = blk(0, CW - 26, 0, 3, 0, P["h_base"] - 20)
@@ -215,6 +245,34 @@ def elec_panel():
         for z in (5, P["h_base"] - 25):
             p = diff(p, cyl_y(3.4, -1, 4, x, z))
     return p
+
+def elec_tray():
+    """Drops into the base on four bosses. Populate it on the bench, then
+    slide the whole loom in as one piece - the difference between a demo you
+    can service and one you have to gut."""
+    w, d = CW - 52, CD - 56
+    m = blk(0, w, 0, d, 0, 3)
+    # corner fixings matching the base bosses
+    for x in (0, w):
+        for y in (0, d):
+            m = union([m, cyl_z(9.0, 0, 3, x, y)])
+            m = diff(m, cyl_z(3.4, -1, 4, x, y))
+    # ESP32-S3 pad: four posts on a 48 x 21 pattern, USB-C facing the panel
+    for dx in (-24, 24):
+        for dy in (-10.5, 10.5):
+            m = union([m, cyl_z(6.0, 3, 8, 44 + dx, 30 + dy)])
+            m = diff(m, cyl_z(1.7, 4, 9, 44 + dx, 30 + dy))
+    m = union([m, blk(16, 74, 12, 16, 3, 5)])
+    # cable-tie slot pairs across the tray
+    for cx in (100, 130, 100, 130):
+        pass
+    for cy in (18, 46, 74):
+        for cx in (98, 128, 158):
+            m = diff(m, blk(cx, cx + 3, cy - 5, cy + 5, -1, 4))
+            m = diff(m, blk(cx + 9, cx + 12, cy - 5, cy + 5, -1, 4))
+    # raised pad for the 5 V supply brick
+    m = union([m, blk(96, 168, 12, 80, 3, 6)])
+    return m
 
 def foot():
     return blk(0, 22, 0, 22, 0, P["h_foot"])
@@ -284,7 +342,7 @@ print(f"  lid travel      {TRAVEL:.1f} mm from 180 deg "
 parts = {}
 for nm, fn in [("case_base", case_base), ("case_mid", case_mid),
                ("case_head", case_head), ("elec_panel", elec_panel),
-               ("foot", foot), ("drawer", drawer)]:
+               ("elec_tray", elec_tray), ("foot", foot), ("drawer", drawer)]:
     parts[nm] = rep(nm, fn())
 parts["lid_A"]  = rep("lid_A",  lid(P["z_lidA"], "A"))
 parts["lid_B"]  = rep("lid_B",  lid(P["z_lidB"], "B"))
