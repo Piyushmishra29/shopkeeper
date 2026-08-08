@@ -44,11 +44,12 @@ P = dict(
     deck_z=39.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
-    # 16, not 18. 18T was tried: travel goes 31.42 -> 35.34 mm and reach
-    # 46% -> 53%, but the rack then needs 51.9 mm of length inside a drawer
-    # that can only carry 49.6, and it costs a reprint of case_lower. The
-    # check "pinion on the rack, open" is what said so.
-    module=1.25, teeth=16, press=math.radians(14.5),
+    # 10 teeth. Chosen on the bench: 10T, 12T and 14T were printed and only
+    # the 10 clears whatever it has to clear in the case. It costs travel
+    # (31.42 -> 19.63 mm full) and it moves the servo 3.75 mm, which means
+    # case_lower is reprinted. 18T was tried earlier and rejected the other
+    # way - the rack would have needed 51.9 mm in a drawer carrying 49.6.
+    module=1.25, teeth=10, press=math.radians(14.5),
     # STUB teeth: addendum 0.8m instead of 1.0m. A full-depth involute at m1.25
     # comes to a 0.45 mm tip - under one extrusion width, so the machine rounds
     # it off and the contact it was supposed to make never happens. 0.8m puts
