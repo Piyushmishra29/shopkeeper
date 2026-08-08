@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""
+shopkeeper NANO — two motorised drawers, as small as an SG90 allows.
+
+92 x 66 x 50 mm. Two drawers SIDE BY SIDE so one mechanism deck serves both;
+stacking them would have doubled the height, because a vertical SG90 costs
+26 mm of dead space under every deck.
+
+    top          0.91" OLED + 2 LEDs on the top face
+    drawers      2 x (42 x 55 x 18), each driven out 23.6 mm
+    deck         slotted for both drive fins
+    mech bay     2 x SG90 (shaft up) + 2 pinions + ESP32-S3
+
+Geometry is verified by boolean interference sweep across the full stroke,
+not by dimension arithmetic — that is what caught every bug in the bigger
+versions.
+"""
+import os, math, glob, sys
+import numpy as np
+import trimesh
+from trimesh.creation import box, cylinder, extrude_polygon
+from shapely.geometry import Polygon
+from mf3 import write_3mf, verify
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT  = os.path.join(HERE, "..", "nano")
+os.makedirs(OUT, exist_ok=True)
+
+P = dict(
+    cw=92.0, cd=66.0, ch=53.0, wall=2.0,
+    deck_z=25.5, deck_t=2.5,
+    dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
+    side_clear=1.2, mid_gap=2.0,
+    module=1.25, teeth=12, press=math.radians(20.0),
+    gear_t=5.0, backlash=0.30,
+    fin_t=3.0, fin_h=8.0,
+    sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
+    clear=0.35, gap=0.8,
+)
+M, N   = P["module"], P["teeth"]
+R_P    = M*N/2                                  # 7.5
+R_TIP, R_ROOT = R_P+M, R_P-1.25*M
+PITCH  = math.pi*M
+TRAVEL = math.pi*R_P                            # 23.56
+TOOTH_H  = 2.25*M
+FIN_SPAN = P["fin_t"] + TOOTH_H
+
+CW, CD, CH, WL = P["cw"], P["cd"], P["ch"], P["wall"]
+DECK   = P["deck_z"] + P["deck_t"]              # 28
+DR_D   = CD - WL - 9.0                          # 55
+DR_TOP = DECK + P["dr_h"]                       # 46
+# two drawers across the internal width
+INNER  = CW - 2*WL
+DR_W   = (INNER - P["mid_gap"] - 2*P["side_clear"]) / 2
+DR_X   = (WL + P["side_clear"],
+          WL + P["side_clear"] + DR_W + P["mid_gap"])
+FIN_X  = DR_W * 0.30                            # in drawer-local coords
+PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P   # pinion offset from FIN_X
+PIN_Y  = 24.0
+
+def T(m,x=0,y=0,z=0): m.apply_translation([x,y,z]); return m
+def blk(x0,x1,y0,y1,z0,z1):
+    x0,x1=sorted((x0,x1)); y0,y1=sorted((y0,y1)); z0,z1=sorted((z0,z1))
+    assert x1>x0 and y1>y0 and z1>z0, f"degenerate {x0,x1,y0,y1,z0,z1}"
+    return T(box(extents=[x1-x0,y1-y0,z1-z0]),(x0+x1)/2,(y0+y1)/2,(z0+z1)/2)
+def cyl_z(d,z0,z1,x,y,s=48): return T(cylinder(radius=d/2,height=z1-z0,sections=s),x,y,(z0+z1)/2)
+def cyl_y(d,y0,y1,x,z,s=40):
+    c=cylinder(radius=d/2,height=y1-y0,sections=s)
+    c.apply_transform(trimesh.transformations.rotation_matrix(-math.pi/2,[1,0,0]))
+    return T(c,x,(y0+y1)/2,z)
+def diff(a,b): return trimesh.boolean.difference([a,b],engine="manifold")
+def union(p): return trimesh.boolean.union(p,engine="manifold")
+
+def chamfer(m,c=2.5):
+    s=c*math.sqrt(2); cuts=[]
+    for (x,y) in ((0,0),(CW,0),(0,CD),(CW,CD)):
+        b=box(extents=[s,s,300])
+        b.apply_transform(trimesh.transformations.rotation_matrix(math.pi/4,[0,0,1]))
+        cuts.append(T(b,x,y,0))
+    return diff(m,union(cuts))
+
+def pinion():
+    half=(PITCH/2-P["backlash"])/2/R_P
+    da=M*math.tan(P["press"])/R_TIP
+    dr=1.25*M*math.tan(P["press"])/R_ROOT
+    pts=[]
+    for i in range(N):
+        th=2*math.pi*i/N
+        for a,r in ((th-half-dr,R_ROOT),(th-half+da,R_TIP),
+                    (th+half-da,R_TIP),(th+half+dr,R_ROOT)):
+            pts.append((r*math.cos(a),r*math.sin(a)))
+    g=extrude_polygon(Polygon(pts),P["gear_t"])
+    hub=cyl_z(9.0,P["gear_t"],P["gear_t"]+5,0,0)
+    m=union([g,hub])
+    m=diff(m,cyl_z(P["sg_spline"]+0.35,2.5,P["gear_t"]+3.5,0,0))
+    m=diff(m,cyl_z(2.6,P["gear_t"]+3.5,P["gear_t"]+6,0,0))
+    return m
+
+def rack_fin(length):
+    h,t=P["fin_h"],P["fin_t"]
+    base=blk(0,t,0,length,0,h); tt=[]
+    for i in range(int(length/PITCH)):
+        yc=(i+0.5)*PITCH
+        top=(PITCH/2-P["backlash"])/2
+        bot=top+TOOTH_H*math.tan(P["press"])
+        tt.append(extrude_polygon(Polygon(
+            [(t,yc-bot),(t+TOOTH_H,yc-top),(t+TOOTH_H,yc+top),(t,yc+bot)]),h))
+    return union([base]+tt)
+
+def case():
+    m=diff(blk(0,CW,0,CD,0,CH), blk(WL,CW-WL,WL,CD+1,WL,CH-WL))
+    m=union([m,blk(WL,CW-WL,WL,CD-WL,P["deck_z"],DECK)])
+    for i,dx in enumerate(DR_X):
+        sx=dx+FIN_X
+        px=dx+FIN_X+PIN_DX
+        # fin slot: full tooth width AND full fin height, through the front wall
+        m=diff(m,blk(sx-P["fin_t"]/2-1.2, sx-P["fin_t"]/2+FIN_SPAN+1.2,
+                     -1, CD-WL-3, DECK-P["fin_h"]-1.5, DECK+1))
+        # pinion pocket + servo well, both under the deck
+        m=diff(m,cyl_z(2*R_TIP+2.5,WL,DECK+1,px,WL+PIN_Y))
+        m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
+                     WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
+                     -1,P["deck_z"]))
+        for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
+            m=diff(m,cyl_z(1.7,2.5,P["deck_z"],px+tx,WL+PIN_Y))
+        # drawer mouth
+        m=diff(m,blk(dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5,
+                     -1,WL+1,DECK-0.6,DR_TOP+P["gap"]))
+    # ESP32-S3 posts on the floor, rear half
+    for ddx in (-24,24):
+        for ddy in (-10.5,10.5):
+            m=union([m,cyl_z(5.0,WL,WL+3.5,CW/2+ddx,CD*0.78+ddy)])
+            m=diff(m,cyl_z(1.7,WL+1,WL+4.5,CW/2+ddx,CD*0.78+ddy))
+    # rear service window + DC jack
+    m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,5,20))
+    m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
+    # top face: OLED window + 2 LEDs
+    m=diff(m,blk(CW/2-13,CW/2+13,CD*0.62-5,CD*0.62+5,CH-WL-1,CH+1))
+    for ddx in (-26,26): m=diff(m,cyl_z(5.0,CH-WL-1,CH+1,CW/2+ddx,CD*0.62))
+    for ddx in (-16,16):
+        # posts must start ABOVE the drawer envelope - at CH-12 they hung
+        # straight into the drawer's path and blocked full travel
+        m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,CH-5,CH-WL)])
+    # side vents
+    for i in range(2):
+        z=6+i*7
+        for x in (-1,CW-WL-1):
+            m=diff(m,blk(x,x+WL+2,CD*0.34,CD*0.62,z,z+2.6))
+    return chamfer(m)
+
+def drawer():
+    """Handle at the FRONT (y=0) — never rotate this into the bay, a 180 deg
+    spin mirrors the drive fin in X and it misses the slot."""
+    W,D,H=DR_W,DR_D,P["dr_h"]
+    y0=7.0
+    m=diff(blk(0,W,y0,y0+D,0,H),
+           blk(P["dr_wall"],W-P["dr_wall"],y0+P["dr_front"],y0+D-P["dr_wall"],
+               P["dr_floor"],H+1))
+    fin=rack_fin(D-16)
+    fin.apply_translation([FIN_X-P["fin_t"]/2,y0+8,-P["fin_h"]])
+    m=union([m,fin])
+    m=union([m,blk(W*0.18,W*0.82,0,y0,4,H-3)])
+    m=diff(m,blk(W*0.24,W*0.76,-1,y0-1.4,6.5,H-5.5))
+    m.apply_translation([0,0,P["fin_h"]])
+    return m
+
+def rep(n,m):
+    e=m.extents
+    print(f"  {n:9s} {e[0]:6.1f} x {e[1]:6.1f} x {e[2]:5.1f}   "
+          f"{m.volume/1000*1.27:5.1f} g   wt={m.is_watertight}")
+    m.export(os.path.join(OUT,n+".stl")); return m
+
+print("shopkeeper NANO\n")
+print(f"  case       {CW:.0f} x {CD:.0f} x {CH:.0f} mm")
+print(f"  drawers    2 x ({DR_W:.1f} x {DR_D:.1f} x {P['dr_h']:.1f})")
+print(f"  bin usable {DR_W-2*P['dr_wall']:.0f} x {DR_D-P['dr_wall']-P['dr_front']:.0f} x {P['dr_h']-P['dr_floor']:.0f}")
+print(f"  pinion     m{M} x {N}T, pitch dia {2*R_P:.1f}")
+print(f"  travel     {TRAVEL:.1f} mm\n")
+
+parts={"case":rep("case",case()),"drawer":rep("drawer",drawer()),
+       "pinion":rep("pinion",pinion())}
+
+print("\n  PHYSICAL CHECKS")
+fails=[]
+def chk(l,c,d):
+    print(f"    [{'PASS' if c else 'FAIL'}] {l:32s} {d}")
+    if not c: fails.append(l)
+
+d0=parts["drawer"]
+y_closed=(CD-WL-1.2)-d0.extents[1]
+worst,wy,wslot=0.0,None,None
+for slot,dx in enumerate(DR_X):
+    for pull in (0,8,16,TRAVEL):
+        i=d0.copy(); i.apply_translation([dx, y_closed-pull, DECK-P["fin_h"]+0.2])
+        h=trimesh.boolean.intersection([i,parts["case"]],engine="manifold")
+        v=float(h.volume)
+        if v>worst:
+            worst,wy,wslot=v,pull,slot
+            wb=h.bounds
+_loc = ""
+if worst >= 1.0:
+    _loc = (f"  @ x {wb[0][0]:.1f}..{wb[1][0]:.1f}"
+            f"  y {wb[0][1]:.1f}..{wb[1][1]:.1f}"
+            f"  z {wb[0][2]:.1f}..{wb[1][2]:.1f}")
+chk("neither drawer fouls the case",worst<1.0,
+    f"worst {worst:.2f} mm3" + (f" (slot {wslot}, pull {wy:.1f}){_loc}" if wy is not None else " across both slots, full stroke"))
+
+fin_len=DR_D-16
+c0=(WL+PIN_Y)-(y_closed+7.0+8.0)
+c1=c0+TRAVEL
+mgn=1.5*M+1.5
+chk("pinion on the rack, closed",mgn<c0<fin_len-mgn,f"{c0:.1f} of 0..{fin_len:.1f}")
+chk("pinion on the rack, open",  mgn<c1<fin_len-mgn,f"{c1:.1f} of 0..{fin_len:.1f}")
+chk("drawer cannot fall out",DR_D-TRAVEL>DR_D*0.5,f"{DR_D-TRAVEL:.1f} of {DR_D:.1f}")
+chk("servo fits under the deck",P["sg_h"]+WL<=P["deck_z"],f"{P['sg_h']+WL:.1f} of {P['deck_z']:.1f}")
+chk("the two servos do not clash",
+    (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),
+    f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
+chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-WL-2:.1f}")
+chk("all watertight",all(m.is_watertight for m in parts.values()),"")
+
+tot=parts["case"].volume/1000*1.27 + 2*parts["drawer"].volume/1000*1.27 \
+    + 2*parts["pinion"].volume/1000*1.27
+print(f"\n  {tot:.0f} g solid  (~{tot*0.85:.0f} g sliced)   vs MINI 187 g, cabinet 1365 g")
+if fails:
+    print("  *** "+", ".join(fails)); sys.exit(1)
+print("  ALL CHECKS PASSED")
+
+PL=os.path.join(OUT,"plates"); os.makedirs(PL,exist_ok=True)
+for f in glob.glob(os.path.join(PL,"*.3mf")): os.remove(f)
+def land(m):
+    m=m.copy(); m.apply_translation(-m.bounds[0])
+    if m.extents[1]>m.extents[0]:
+        m.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2,[0,0,1]))
+        m.apply_translation(-m.bounds[0])
+    return m
+c,dd,pn=land(parts["case"]),land(parts["drawer"]),land(parts["pinion"])
+L=[("case",c,6,6),("drawer_A",dd,6,6+c.extents[1]+6),
+   ("drawer_B",dd,6+dd.extents[0]+6,6+c.extents[1]+6),
+   ("pinion_1",pn,6+2*(dd.extents[0]+6),6+c.extents[1]+6),
+   ("pinion_2",pn,6+2*(dd.extents[0]+6)+pn.extents[0]+5,6+c.extents[1]+6)]
+p=os.path.join(PL,"plate_nano.3mf"); write_3mf(p,L); o,b=verify(p)
+w=max(x+m.extents[0] for _,m,x,y in L); h=max(y+m.extents[1] for _,m,x,y in L)
+print(f"  ONE plate {w:.0f} x {h:.0f} mm, {len(L)} objects, ok={o==b}")
+print(f"  {os.path.normpath(p)}")
