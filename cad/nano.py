@@ -60,14 +60,16 @@ P = dict(
     # floor so the horn lands where the rack's teeth are; sg_ear is where the
     # mounting flange sits; sg_horn is the face the horn screws to.
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
-    sg_base=6.0, sg_ear=15.9, sg_horn=26.5,
+    # sg_horn follows from the measured spline: body top (22.7) + 4.0 of
+    # spline = 26.7 above the body base. It was 26.5, taken off a datasheet.
+    sg_base=6.0, sg_ear=15.9, sg_horn=26.7,
     # The output spline itself: 20 teeth, ~4.8 mm across, ~3.8 mm of it proud
     # of the body top. hub="spline" bores the pinion straight onto it and drops
     # the horn entirely; hub="horn" keeps the old keyed arm slot.
     # 5.0 measured on the actual servo, not the 4.8 nominal I had assumed.
     # A 4.65 bore against a 5.0 spline is 0.35 undersize - that does not press
     # on, it splits the boss.
-    sg_spl_d=5.0, sg_spl_h=3.8,
+    sg_spl_d=5.0, sg_spl_h=4.0,
     hub="spline",
     # THE OUTPUT SHAFT IS NOT IN THE MIDDLE OF THE BODY. It sits ~5.9 mm from
     # one end, which is plain to see on the part and was modelled nowhere: the
