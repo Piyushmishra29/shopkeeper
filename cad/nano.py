@@ -234,13 +234,19 @@ def case_lower():
             x=WL+9+i*13; y=WL+9+j*13
             if any((x-kx)**2+(y-ky)**2 < kr**2 for kx,ky,kr in keep): continue
             m=diff(m,cyl_z(8.0,-1,P["floor_t"]+1,x,y))
-    # ── alignment pins, 4 off, on the wall centreline ──
-    # Centreline is 1.0 from the outer face and the deck starts at 2.3, so
-    # these clear the deck without notching it. They locate the halves; the
-    # ledge and the walls still carry the load.
-    for (px_, py_) in ((CW/2, WL/2), (CW/2, CD-WL/2),
-                       (WL/2, CD/2), (CW-WL/2, CD/2)):
-        m=union([m, cyl_z(1.8, H, H+4.0, px_, py_)])
+    # ── alignment pins, on solid shoulders ──
+    # Mid-wall pins stood in 2 mm of wall and would snap off. Corners are the
+    # right idea, but the two FRONT corners sit inside the drawers' travel -
+    # a pad there is struck at 8 mm of pull. So: both REAR corners, where two
+    # walls meet, plus the front MULLION, which is 6 mm of solid material
+    # between the two drawer mouths. Three well-spread points beat four with
+    # one in the way.
+    PINS = ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1))
+    for (cx, cy, sx, sy) in PINS:
+        m=union([m, blk(cx, cx+6.0*sx, cy, cy+6.0*sy, H-5.0, H)])
+        m=union([m, cyl_z(3.0, H, H+4.0, cx+3.5*sx, cy+3.5*sy)])
+    m=union([m, blk(CW/2-3.0, CW/2+3.0, WL, WL+6.0, H-5.0, H)])
+    m=union([m, cyl_z(3.0, H, H+4.0, CW/2, WL+3.0)])
     return chamfer(m)
 
 def deck():
@@ -250,9 +256,18 @@ def deck():
     for dx in DR_X:
         sx=dx+FIN_X
         px=dx+FIN_X+PIN_DX
+        # slot stops 8 mm short of the rear wall, not 3: the fin never travels
+        # past y=60, and the extra material is the only thing tying the deck's
+        # three sections together once the corner notches are cut
         m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
-                     -1,CD-WL-3,-1,P["deck_t"]+1))
+                     -1,CD-WL-8,-1,P["deck_t"]+1))
         m=diff(m,cyl_z(2*R_TIP+2.5,-1,P["deck_t"]+1,px,WL+PIN_Y))
+    for (cx, cy, sx, sy) in ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1)):
+        # offsets must follow the corner's SIGN, or the notch runs inward on
+        # the +x/+y corners and leaves the pad uncovered
+        m=diff(m, blk(cx-1.5*sx, cx+7.4*sx, cy-1.5*sy, cy+7.4*sy,
+                      -1, P["deck_t"]+1))
+    m=diff(m, blk(CW/2-4.0, CW/2+4.0, WL-1.5, WL+7.4, -1, P["deck_t"]+1))
     m.apply_translation([-(WL+0.3),-(WL+0.3),0])
     return m
 
@@ -277,10 +292,12 @@ def case_upper():
     for ddx in (-16,16):
         m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,H-5,H-WL)])
     m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,2,14))
-    # sockets for case_lower's alignment pins
-    for (px_, py_) in ((CW/2, WL/2), (CW/2, CD-WL/2),
-                       (WL/2, CD/2), (CW-WL/2, CD/2)):
-        m=diff(m, cyl_z(2.15, -1, 4.5, px_, py_))
+    # matching shoulders and sockets
+    for (cx, cy, sx, sy) in ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1)):
+        m=union([m, blk(cx, cx+6.0*sx, cy, cy+6.0*sy, 0, 5.0)])
+        m=diff(m, cyl_z(3.35, -1, 4.6, cx+3.5*sx, cy+3.5*sy))
+    m=union([m, blk(CW/2-3.0, CW/2+3.0, WL, WL+6.0, 0, 5.0)])
+    m=diff(m, cyl_z(3.35, -1, 4.6, CW/2, WL+3.0))
     return chamfer(m)
 
 RACK_L  = DR_D-6      # rack now runs nearly the full drawer
