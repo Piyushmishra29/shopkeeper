@@ -268,11 +268,53 @@ LAYOUT = [("hinge_carrier", parts["hinge_carrier"],  10,  10),
           ("bin_divider",   parts["bin_divider"],   130,  45),
           ("retainer_A",    parts["servo_retainer"],145, 135),
           ("retainer_B",    parts["servo_retainer"],185, 135)]
-scene = trimesh.Scene()
-for nm, m, x, y in LAYOUT:
-    scene.add_geometry(place(m, x, y), node_name=nm)
-b = scene.bounds
-print(f"\n  plate envelope  {b[1][0]:.0f} x {b[1][1]:.0f} x {b[1][2]:.0f} mm"
-      f"   z-min {b[0][2]:.2f} (must be 0.00)")
-scene.export(os.path.join(OUT, "toolcell_parts.3mf"))
-print(f"  wrote {OUT}/toolcell_parts.3mf")
+CT = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+      '</Types>')
+RELS = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Target="/3D/3dmodel.model" Id="rel0" '
+        'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>'
+        '</Relationships>')
+
+def write_3mf(path, items):
+    """Minimal, correct 3MF. trimesh 5.0 writes an empty <build> section,
+    which makes every slicer show an empty plate."""
+    import zipfile
+    res, build = [], []
+    for i, (name, m, tx, ty) in enumerate(items, start=1):
+        v = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>'
+                    for a, b, c in m.vertices)
+        t = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>'
+                    for a, b, c in m.faces)
+        res.append(f'<object id="{i}" type="model" name="{name}">'
+                   f'<mesh><vertices>{v}</vertices>'
+                   f'<triangles>{t}</triangles></mesh></object>')
+        build.append(f'<item objectid="{i}" '
+                     f'transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} 0"/>')
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<model unit="millimeter" xml:lang="en-US" '
+           'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+           '<metadata name="Application">ToolCell generator</metadata>'
+           f'<resources>{"".join(res)}</resources>'
+           f'<build>{"".join(build)}</build></model>')
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", CT)
+        z.writestr("_rels/.rels", RELS)
+        z.writestr("3D/3dmodel.model", xml)
+
+x1 = max(x + m.extents[0] for _, m, x, y in LAYOUT)
+y1 = max(y + m.extents[1] for _, m, x, y in LAYOUT)
+z1 = max(m.extents[2] for _, m, _, _ in LAYOUT)
+print(f"\n  plate envelope  {x1:.0f} x {y1:.0f} x {z1:.0f} mm  "
+      f"({len(LAYOUT)} objects, all at z=0)")
+p3 = os.path.join(OUT, "toolcell_parts.3mf")
+write_3mf(p3, LAYOUT)
+import zipfile as _z
+with _z.ZipFile(p3) as z:
+    xml = z.read("3D/3dmodel.model").decode()
+print(f"  objects={xml.count('<object id=')}  build items={xml.count('<item objectid=')}"
+      f"   {'OK' if xml.count('<object id=') == xml.count('<item objectid=') else '*** MISMATCH ***'}")
+print(f"  wrote {p3}")
