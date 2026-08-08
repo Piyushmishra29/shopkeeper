@@ -186,14 +186,21 @@ def case_lower():
     FT = P["floor_t"]
     for sgn in (-1, 1):
         yy = EY + sgn*(EBW/2 + 1.5)
-        # Full-length locating wall with PEGS that engage the breadboard's own
-        # side slots (3 mm wide, 4 mm tall, at 12-15 and 66-69 mm along it).
-        # It clips in - no glue, and it comes out again.
+        # The breadboard interlocks like every other one: MALE dovetails down
+        # one long side, FEMALE sockets down the other. So the two walls are
+        # NOT the same part - one gets pegs, the other gets clearance.
+        #   +Y wall  ->  pegs, they enter the FEMALE sockets
+        #   -Y wall  ->  notches, they receive the MALE dovetails
+        # Insert with the female side facing the rear wall.
         m=union([m,blk(EX-EBL/2-1.5, EX+EBL/2+1.5, yy-1.5, yy+1.5, FT, FT+6.5)])
         for sx0 in (13.5, 67.5):
             px_ = EX - EBL/2 + sx0
-            m=union([m,blk(px_-1.4, px_+1.4, yy-1.5*sgn, yy-3.0*sgn,
-                           FT+1.0, FT+4.6)])
+            if sgn > 0:
+                m=union([m,blk(px_-1.4, px_+1.4, yy-1.5, yy-3.0,
+                               FT+1.0, FT+4.6)])
+            else:
+                m=diff(m,blk(px_-2.0, px_+2.0, yy-1.6, yy+1.6,
+                             FT+0.6, FT+5.4))
     # end stop at the front, open at the rear so the USB-C is reachable
     m=union([m,blk(EX-EBL/2-1.0, EX-EBL/2+1.0, EY-EBW/2-1.4, EY+EBW/2+1.4,
                    FT, FT+5.2)])
