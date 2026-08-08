@@ -213,6 +213,10 @@ def case_lower():
     # DevKit's own headers take dupont leads directly.
     for wx in (20,40,60):
         m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))
+    # ── USB-C x2 (native + UART) on the RIGHT-HAND wall ──
+    # They sit on one END of the DevKit, and that end faces a SIDE wall, not
+    # the rear. Orient the board with its USB end to the right.
+    m=diff(m,blk(CW-WL-1, CW+1, EY-13.0, EY+13.0, 6.0, 20.0))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
     for i in range(2):
         z=8+i*8
