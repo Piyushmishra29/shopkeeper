@@ -21,6 +21,8 @@ import trimesh
 from trimesh.creation import box, cylinder, extrude_polygon
 from shapely.geometry import Polygon
 from mf3 import write_3mf, write_3mf_plates, verify
+from shapely.affinity import scale as _sc, translate as _tr
+from logo import trace as _logo_trace
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT  = os.path.join(HERE, "..", "nano")
@@ -304,6 +306,22 @@ def case_upper():
         m=diff(m, cyl_z(3.35, -1, 4.6, cx+3.5*sx, cy+3.5*sy))
     m=union([m, blk(CW/2-3.0, CW/2+3.0, WL, WL+6.0, 0, 5.0)])
     m=diff(m, cyl_z(3.35, -1, 4.6, CW/2, WL+3.0))
+
+    # ── OMMI FORGE mark, debossed into the top face ──
+    # case_upper prints top-face-down, so the mark's edges form against the
+    # bed - the crispest surface the machine makes. 0.7 deep; fill with a
+    # black paint pen. A colour change is not worth a purge tower on one nozzle.
+    g = _logo_trace()[0]
+    LH = 11.0                                   # mark height on the part
+    g = _sc(g, LH/0.772, LH/0.772, origin=(0, 0))
+    g = _tr(g, CW/2, 9.0)                       # front border, ahead of the keypad
+    # the mark is 7 disjoint shapes and extrude_polygon takes ONE polygon
+    cut = []
+    for poly in (list(g.geoms) if hasattr(g, "geoms") else [g]):
+        e = extrude_polygon(poly, 0.9)
+        e.apply_translation([0, 0, H - 0.7])
+        cut.append(e)
+    m = diff(m, union(cut))
     return chamfer(m)
 
 RACK_L  = DR_D-6      # rack now runs nearly the full drawer
