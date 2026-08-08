@@ -425,22 +425,9 @@ for nm,q,ci in ALL:
 aw=max(px+m.extents[0] for _,m,px,_,_ in placed)
 ah=max(py+m.extents[1] for _,m,_,py,_ in placed)
 assert aw<=BED and ah<=BED, f"combined plate {aw:.0f}x{ah:.0f} exceeds bed"
-# ONE FILE, TWO PLATES: plate 1 white, plate 2 yellow. Single nozzle, so the
-# colour boundary has to be a plate boundary - never a swap mid-print.
-GROUPS=[]
-for lab,col,items in PLATES:
-    ps,_,_=pack(items)
-    ci=0 if "white" in lab else 1
-    GROUPS.append((lab.split("_")[1].capitalize(),
-                   [(n,m,px,py,ci) for n,m,px,py in ps]))
-pa=os.path.join(PL,"shopkeeper_nano.3mf")
-n=write_3mf_plates(pa,GROUPS,
-                   materials=[("white","#F2F2F2FF"),("yellow","#F2B705FF")])
-print(f"\n  shopkeeper_nano.3mf   {n} objects across {len(GROUPS)} plates")
-for gname,gi in GROUPS:
-    print(f"      plate {gname:7s} {len(gi)} objects: "
-          + ", ".join(x[0] for x in gi))
-
+# Two separate single-colour files. A multi-plate 3MF was tried and Bambu did
+# not bin the objects into separate plates - they all landed in one scene and
+# overlapped. Open one file, slice, swap the spool, open the other.
 print(f"\n  2 print plates, {total:.0f} g solid (~{total*0.85:.0f} g sliced), "
       f"ZERO filament changes")
 print(f"  {os.path.normpath(PL)}")
