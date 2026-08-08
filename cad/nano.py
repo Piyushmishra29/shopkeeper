@@ -27,10 +27,10 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=66.0, ch=53.0, wall=2.0, floor_t=1.4,
-    deck_z=25.5, deck_t=2.5,
+    cw=92.0, cd=66.0, ch=60.0, wall=2.0, floor_t=1.4,
+    deck_z=33.0, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
-    side_clear=1.2, mid_gap=2.0,
+    side_clear=1.2, mid_gap=6.0,
     module=1.25, teeth=12, press=math.radians(14.5),
     gear_t=5.0, backlash=0.30,
     fin_t=3.0, fin_h=8.0,
@@ -133,7 +133,7 @@ def case_lower():
     Floor is thinner than the walls and perforated: it carries nothing but the
     servo cradles and the ESP32 posts, and every gram there is print time."""
     H=DECK; FT=P["floor_t"]
-    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,FT,H+1))
+    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD-WL,FT,H+1))
     # ledge the deck drops onto
     m=union([m,blk(WL,CW-WL,WL,CD-WL,H-P["deck_t"]-LEDGE,H-P["deck_t"])])
     # NO front rail: it sat directly in the path of both drive fins. The deck
@@ -147,7 +147,7 @@ def case_lower():
                      -1,WL+1,DECK-P["fin_h"]-1.5,DECK+1))
         px=dx+FIN_X+PIN_DX
         # servo cradle: four walls up from the floor, open top so it drops in
-        m=union([m,blk(px-P["sg_l"]/2-P["clear"]-1.6,px+P["sg_l"]/2+P["clear"]+1.6,
+        m=union([m,blk(px-P["sg_tab"]/2-2.0,px+P["sg_tab"]/2+2.0,
                        WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
                        WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,WL,WL+13)])
         m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
@@ -155,10 +155,12 @@ def case_lower():
                      WL-1,WL+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,WL,WL+13,px+tx,WL+PIN_Y))
-    for ddx in (-24,24):
-        for ddy in (-10.5,10.5):
-            m=union([m,cyl_z(5.0,WL,WL+3.5,CW/2+ddx,CD*0.78+ddy)])
-            m=diff(m,cyl_z(1.7,WL+1,WL+4.5,CW/2+ddx,CD*0.78+ddy))
+    for ddx in (-10.5,10.5):
+        for ddy in (-24,24):
+            m=union([m,cyl_z(5.0,P["floor_t"],P["floor_t"]+3.5,
+                             CW*0.22+ddx,CD*0.55+ddy)])
+            m=diff(m,cyl_z(1.7,P["floor_t"]+1,P["floor_t"]+4.5,
+                           CW*0.22+ddx,CD*0.55+ddy))
     m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,5,20))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
     for i in range(2):
@@ -193,7 +195,7 @@ def case_upper():
     """Drawer bay + top face. Printed UPSIDE DOWN: the top face lands on the
     bed, the walls rise, and the drawer mouths open out of the top."""
     H=CH-DECK
-    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,-1,H-WL))
+    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD-WL,-1,H-WL))
     for dx in DR_X:
         m=diff(m,blk(dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5,
                      -1,WL+1,-1,DR_TOP+P["gap"]-DECK))
