@@ -20,6 +20,7 @@ import numpy as np
 import trimesh
 from trimesh.creation import box, cylinder, extrude_polygon
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 from mf3 import write_3mf, write_3mf_plates, verify
 from shapely.affinity import scale as _sc, translate as _tr
 from logo import trace as _logo_trace
@@ -29,26 +30,40 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=74.0, ch=62.0, wall=2.0, floor_t=1.4,
-    deck_z=34.5, deck_t=2.5,
+    cw=92.0, cd=74.0, ch=66.0, wall=2.0, floor_t=1.4,
+    deck_z=39.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
     module=1.25, teeth=16, press=math.radians(14.5),
-    gear_t=5.0, backlash=0.30,
-    fin_t=3.0, fin_h=8.0,
+    # STUB teeth: addendum 0.8m instead of 1.0m. A full-depth involute at m1.25
+    # comes to a 0.45 mm tip - under one extrusion width, so the machine rounds
+    # it off and the contact it was supposed to make never happens. 0.8m puts
+    # the tip at 0.75 mm and still leaves a contact ratio of 1.8.
+    add_f=0.8, ded_f=1.25,
+    gear_t=6.0, backlash=0.50,
+    fin_t=3.0, fin_h=11.2,
+    # SG90, measured from the body base upward. sg_base lifts it off the case
+    # floor so the horn lands where the rack's teeth are; sg_ear is where the
+    # mounting flange sits; sg_horn is the face the horn screws to.
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
-    clear=0.35, gap=0.8,
+    sg_base=6.0, sg_ear=15.9, sg_horn=26.5,
+    clear=0.35, gap=1.5,
     dr_d=55.0,
-    esp_h=27.0,              # ESP32-S3 on its breadboard, pins connected               # drawer depth, now independent of case depth
+    esp_h=27.0,              # ESP32-S3 on its breadboard, pins connected
     pull="cut",              # "cut" = scalloped finger pull, "knob" = press-fit knob
 )
 M, N   = P["module"], P["teeth"]
-R_P    = M*N/2                                  # 7.5
-R_TIP, R_ROOT = R_P+M, R_P-1.25*M
+R_P    = M*N/2                                  # 10.0
+ADD, DED = P["add_f"]*M, P["ded_f"]*M           # 1.0, 1.5625
+R_TIP, R_ROOT = R_P+ADD, R_P-DED                # 11.0, 8.4375
+R_BASE = R_P*math.cos(P["press"])               # 9.6815
 PITCH  = math.pi*M
-TRAVEL = math.pi*R_P                            # 23.56
-TOOTH_H  = 2.25*M
+TRAVEL = math.pi*R_P                            # 31.42
+TOOTH_H  = ADD + DED                            # 2.5625
 FIN_SPAN = P["fin_t"] + TOOTH_H
+# servo-driven heights, all referenced to the case floor
+SG_BASE = P["sg_base"]                          # servo body bottom
+SG_HORN = SG_BASE + P["sg_horn"]                # horn face = pinion underside
 
 CW, CD, CH, WL = P["cw"], P["cd"], P["ch"], P["wall"]
 DECK   = P["deck_z"] + P["deck_t"]              # 28
@@ -62,8 +77,19 @@ DR_X   = (WL + P["side_clear"],
           WL + P["side_clear"] + DR_W + P["mid_gap"])
 FIN_X  = DR_W * 0.20   # moved inboard so the bigger pinion's servo cradle
                        # still clears the right-hand case wall
-PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P   # pinion offset from FIN_X
+# Pinion axis, measured from the rack's PITCH LINE - which sits one dedendum
+# out from the blade face, not at the tooth tip. Getting this wrong by one
+# addendum is the classic way to build a gear pair that binds.
+PIN_DX = P["fin_t"]/2 + DED + R_P               # pinion offset from FIN_X
 PIN_Y  = 17.6
+# ── alignment pins: ONE definition, used by all three parts ──
+# case_lower grows them, deck is drilled for them, case_upper is socketed for
+# them. Three parts reading one list is the only way they stay in agreement.
+PIN_D, PIN_HOLE, PIN_SOCK = 2.5, 3.0, 3.1
+PIN_POS = ((WL+4.5, CD-WL-4.5), (CW-WL-4.5, CD-WL-4.5), (CW/2, WL+4.0))
+PAD = ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1))   # two rear corners
+PAD_MULL = (CW/2-3.0, CW/2+3.0, WL, WL+7.0)          # front mullion, on case_lower
+PAD_MULL_U = (CW/2-2.4, CW/2+2.4, WL, WL+7.0)        # narrower: drawers pass either side
 
 def T(m,x=0,y=0,z=0): m.apply_translation([x,y,z]); return m
 def blk(x0,x1,y0,y1,z0,z1):
@@ -90,19 +116,45 @@ def chamfer(m,c=2.5):
         cuts.append(T(b,x,y,0))
     return diff(m,union(cuts))
 
+def _inv(a):
+    """Involute function. The whole gear is three lines of maths hung off this."""
+    return math.tan(a) - a
+
+def tooth_half_angle(r):
+    """Half the tooth's angular thickness at radius r, on the involute.
+
+    Inside the base circle the involute does not exist, so the flank drops
+    radially to the root - the standard printed-gear approximation, and at
+    m1.25 the difference is well under one extrusion width."""
+    r = max(r, R_BASE)
+    a = math.acos(min(1.0, R_BASE/r))
+    # thickness at the pitch circle, thinned by the backlash allowance
+    th_p = (PITCH/2 - P["backlash"]) / 2 / R_P
+    return th_p + _inv(P["press"]) - _inv(a)
+
 def pinion():
-    half=(PITCH/2-P["backlash"])/2/R_P
-    da=M*math.tan(P["press"])/R_TIP
-    dr=1.25*M*math.tan(P["press"])/R_ROOT
-    pts=[]
+    """TRUE INVOLUTE flanks.
+
+    These were straight-sided trapezoids, which is correct for a RACK and wrong
+    for a pinion: a trapezoid carries 0.26 mm of excess material per flank at
+    the tip, so the pair had zero clearance at nominal size and hard-jammed at
+    the +0.05 mm/surface that generic PLA actually prints at. A rack's conjugate
+    profile IS a straight flank at the pressure angle - the rack was never the
+    problem."""
+    STEPS = 16
+    pts = []
     for i in range(N):
-        th=2*math.pi*i/N
-        for a,r in ((th-half-dr,R_ROOT),(th-half+da,R_TIP),
-                    (th+half-da,R_TIP),(th+half+dr,R_ROOT)):
-            pts.append((r*math.cos(a),r*math.sin(a)))
-    g=extrude_polygon(Polygon(pts),P["gear_t"])
-    hub=cyl_z(9.0,P["gear_t"],P["gear_t"]+5,0,0)
-    m=union([g,hub])
+        th = 2*math.pi*i/N
+        # rising flank: root -> tip, angles measured off the tooth centreline
+        rs = [R_ROOT] + [R_BASE + (R_TIP-R_BASE)*k/(STEPS-1) for k in range(STEPS)]
+        for r in rs:
+            a = th - tooth_half_angle(r)
+            pts.append((r*math.cos(a), r*math.sin(a)))
+        # falling flank: tip -> root, mirrored
+        for r in reversed(rs):
+            a = th + tooth_half_angle(r)
+            pts.append((r*math.cos(a), r*math.sin(a)))
+    m=extrude_polygon(Polygon(pts),P["gear_t"])
     # ── drive through the servo's own HORN, not the spline ──
     # A printed bore on a 4.8 mm 20-tooth spline cannot grip: the teeth are
     # 0.75 mm apart, far under what a 0.4 nozzle resolves, so it just reams
@@ -114,10 +166,16 @@ def pinion():
     # walls: ~0.7 MPa against PETG's ~50, so the margin is enormous.
     #
     # A real SG90 double-arm horn is 7.0 mm wide at the boss and 4.6 at the tip,
-    # 1.5-1.6 thick, 17.5 long each side. Slot is sized for the WIDEST point.
+    # 1.5-1.6 thick, 17.5 long each side. The slot is a TAPERED THROUGH-CUT that
+    # follows that shape: a straight 7.6 slot rattles on the 4.6 tips, and a
+    # blind 16 mm slot leaves its corners buried inside a tooth.
     m=diff(m,cyl_z(8.6,-1,2.7,0,0))                      # horn boss recess
-    m=diff(m,blk(-3.8,3.8,-8.0,8.0,-1,2.1))              # arm slot, 7.6 x 16 x 2.1
-    m=diff(m,cyl_z(4.6,-1,P["gear_t"]+6,0,0))            # driver reaches the M2.5
+    arm=extrude_polygon(Polygon([(-3.6,3.0),(-2.4,20),(2.4,20),(3.6,3.0),
+                                 (3.6,-3.0),(2.4,-20),(-2.4,-20),(-3.6,-3.0)]),3.1)
+    m=diff(m,T(arm,0,0,-1))
+    m=diff(m,cyl_z(4.6,-1,P["gear_t"]+1,0,0))            # driver reaches the M2.5
+    # The 5 mm hub is gone. With the deck raised it would have run into the
+    # drawer floor, and a 6 mm face needs no help standing up.
     return m
 
 def rack_fin(length,h=None):
@@ -129,8 +187,8 @@ def rack_fin(length,h=None):
         # half-thickness is defined at the PITCH LINE, which sits one addendum
         # below the tip - not at the tip itself
         hp  = (PITCH/2-P["backlash"])/2
-        tip = hp - M*math.tan(P["press"])
-        rt  = hp + 1.25*M*math.tan(P["press"])
+        tip = hp - ADD*math.tan(P["press"])
+        rt  = hp + DED*math.tan(P["press"])
         tt.append(extrude_polygon(Polygon(
             [(t,yc-rt),(t+TOOTH_H,yc-tip),(t+TOOTH_H,yc+tip),(t,yc+rt)]),h))
     return union([base]+tt)
@@ -170,15 +228,27 @@ def case_lower():
         m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
                      -1,WL+1,DECK-P["fin_h"]-1.5,DECK+1))
         px=dx+FIN_X+PIN_DX
-        # servo cradle: four walls up from the floor, open top so it drops in
+        # ── servo cradle: a PEDESTAL, not a well ──
+        # The servo's height was never modelled. It bottomed out on 0.38 mm of
+        # remaining floor (the pocket cut 1.0 mm into a 1.4 mm floor), the
+        # screw holes stopped 1.65 mm short of the flange so it could not be
+        # bolted, and the pinion's Z therefore depended on which of those it
+        # happened to rest on. Now the body bottoms on a solid pedestal at
+        # sg_base and that single surface fixes the horn height, hence the
+        # pinion height. Screws are location, not support.
+        CRT = SG_BASE + P["sg_ear"]              # cradle wall top = flange underside
         m=union([m,blk(px-P["sg_tab"]/2-2.0,px+P["sg_tab"]/2+2.0,
                        WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
-                       WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,P["floor_t"],P["floor_t"]+13)])
+                       WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,P["floor_t"],CRT)])
+        # body pocket bottoms ON the pedestal - it no longer eats the floor
         m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
                      WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
-                     P["floor_t"]-1,P["floor_t"]+14))
+                     SG_BASE,CRT+1))
+        # Pilot holes as vertical SLOTS. Clone SG90s vary about 1 mm in where
+        # the flange sits, and a round hole that misses is worse than useless.
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
-            m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
+            m=diff(m,blk(px+tx-0.85,px+tx+0.85,
+                         WL+PIN_Y-0.85,WL+PIN_Y+0.85,CRT-5.5,CRT+1))
     # ── ESP32-S3 DevKit ON ITS BREADBOARD, behind the servos ──
     # Measured assembly: 81.5 long x 35.5 across x ~15 tall, board plugged into
     # two breadboard strips. No soldering, so the breadboard stays in the case
@@ -195,12 +265,17 @@ def case_lower():
         #   +Y wall  ->  pegs, they enter the FEMALE sockets
         #   -Y wall  ->  notches, they receive the MALE dovetails
         # Insert with the female side facing the rear wall.
-        m=union([m,blk(EX-EBL/2-EBX-1.5, EX+EBL/2+EBX+1.5, yy-1.5, yy+1.5, FT, FT+6.5)])
+        # The rear rail's outer face landed 0.25 mm shy of the rear wall - a
+        # slot no nozzle can enter, so the slicer either welds it shut or
+        # leaves a void. Run it INTO the wall instead.
+        ry1 = (CD-WL) if sgn > 0 else (yy+1.5)
+        m=union([m,blk(EX-EBL/2-EBX-1.5, EX+EBL/2+EBX+1.5, yy-1.5, ry1, FT, FT+6.5)])
         for sx0 in (13.5, 67.5):
             px_ = EX - EBL/2 + sx0
             if sgn > 0:
-                m=union([m,blk(px_-1.4, px_+1.4, yy-1.5, yy-3.0,
-                               FT+1.0, FT+4.6)])
+                # started 1.0 mm above the floor, so its underside printed on
+                # nothing. It reaches the floor now.
+                m=union([m,blk(px_-1.4, px_+1.4, yy-1.5, yy-3.0, FT, FT+4.6)])
             else:
                 m=diff(m,blk(px_-2.0, px_+2.0, yy-1.6, yy+1.6,
                              FT+0.6, FT+5.4))
@@ -249,12 +324,27 @@ def case_lower():
     # walls meet, plus the front MULLION, which is 6 mm of solid material
     # between the two drawer mouths. Three well-spread points beat four with
     # one in the way.
-    PINS = ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1))
-    for (cx, cy, sx, sy) in PINS:
-        m=union([m, blk(cx, cx+6.0*sx, cy, cy+6.0*sy, H-5.0, H)])
-        m=union([m, cyl_z(3.0, H, H+4.0, cx+3.5*sx, cy+3.5*sy)])
-    m=union([m, blk(CW/2-3.0, CW/2+3.0, WL, WL+6.0, H-5.0, H)])
-    m=union([m, cyl_z(3.0, H, H+4.0, CW/2, WL+3.0)])
+    # Pads stop at the DECK UNDERSIDE, not at the deck's top face. They used to
+    # fill the deck's own thickness, which forced three notches into the deck -
+    # and one of those notches is what cut it down to a 0.60 mm neck. Now the
+    # pins simply pass through the deck, which locates it as a bonus.
+    zt = H - P["deck_t"]
+    pb = H - 5.0                                  # pad underside
+    for (cx, cy, sx, sy) in PAD:
+        m=union([m, blk(cx, cx+7.0*sx, cy, cy+7.0*sy, pb, zt)])
+        # 45 deg gusset off the rear wall. Without it the pad is a flat 7x7
+        # shelf hanging in mid-air 37 mm up - 140 mm2 of the part's entire
+        # unsupported area is these three pads.
+        m=union([m, prism_x([(cy, pb-7.0), (cy+7.0*sy, pb), (cy, pb)],
+                            min(cx, cx+7.0*sx), max(cx, cx+7.0*sx))])
+    m=union([m, blk(*PAD_MULL, pb, zt)])
+    m=union([m, prism_x([(WL, pb-7.0), (WL+7.0, pb), (WL, pb)],
+                        PAD_MULL[0], PAD_MULL[1])])
+    for (hx, hy) in PIN_POS:
+        # Ø2.5, not Ø3.0. A 3.0 pin in a 3.35 socket is 0.36 diametral, which
+        # after PLA's usual hole shrink and peg growth lands in INTERFERENCE -
+        # and a 3 mm printed pin forced into interference snaps.
+        m=union([m, cyl_z(PIN_D, zt, H+4.0, hx, hy)])
     return chamfer(m)
 
 def deck():
@@ -264,18 +354,20 @@ def deck():
     for dx in DR_X:
         sx=dx+FIN_X
         px=dx+FIN_X+PIN_DX
-        # slot stops 8 mm short of the rear wall, not 3: the fin never travels
-        # past y=60, and the extra material is the only thing tying the deck's
-        # three sections together once the corner notches are cut
+        # The blade's rearmost point at the closed position is y = 56.0. The
+        # slot used to end at 64.0 and the rear corner notch began at 64.6,
+        # leaving a 0.60 mm neck holding on the whole left bearing finger -
+        # a part that snaps coming off the bed. Ending at 60.5 gives 4.5 mm
+        # of tie and still 4.5 mm of clearance ahead of the blade.
         m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
-                     -1,CD-WL-8,-1,P["deck_t"]+1))
+                     -1,CD-WL-11.5,-1,P["deck_t"]+1))
         m=diff(m,cyl_z(2*R_TIP+2.5,-1,P["deck_t"]+1,px,WL+PIN_Y))
-    for (cx, cy, sx, sy) in ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1)):
-        # offsets must follow the corner's SIGN, or the notch runs inward on
-        # the +x/+y corners and leaves the pad uncovered
-        m=diff(m, blk(cx-1.5*sx, cx+7.4*sx, cy-1.5*sy, cy+7.4*sy,
-                      -1, P["deck_t"]+1))
-    m=diff(m, blk(CW/2-4.0, CW/2+4.0, WL-1.5, WL+7.4, -1, P["deck_t"]+1))
+    # Pin CLEARANCE HOLES, not corner notches. The notches were what created the
+    # neck, and they left the deck loose - it just rested on two 1.2 mm ledges
+    # with nothing holding it down. Now the same three pins that register the
+    # case halves pass through the deck and locate it too.
+    for (hx, hy) in PIN_POS:
+        m=diff(m, cyl_z(PIN_HOLE, -1, P["deck_t"]+1, hx, hy))
     m.apply_translation([-(WL+0.3),-(WL+0.3),0])
     return m
 
@@ -299,13 +391,29 @@ def case_upper():
     for ddx in (-26,26): m=diff(m,cyl_z(5.0,H-WL-1,H+1,CW/2+ddx,CD*0.62))
     for ddx in (-16,16):
         m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,H-5,H-WL)])
-    m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,2,14))
+    # Rear vent as FOUR windows. As one 56 mm opening its roof was a single
+    # 56 x 2 mm bridge at print height 23 of 25 - half of this part's entire
+    # unsupported area in one span. Four 11 mm windows bridge themselves.
+    for k in range(4):
+        vx = 18 + k*15.0
+        m=diff(m,blk(vx,vx+11.0,CD-WL-1,CD+1,2,14))
     # matching shoulders and sockets
-    for (cx, cy, sx, sy) in ((WL, CD-WL, 1, -1), (CW-WL, CD-WL, -1, -1)):
-        m=union([m, blk(cx, cx+6.0*sx, cy, cy+6.0*sy, 0, 5.0)])
-        m=diff(m, cyl_z(3.35, -1, 4.6, cx+3.5*sx, cy+3.5*sy))
-    m=union([m, blk(CW/2-3.0, CW/2+3.0, WL, WL+6.0, 0, 5.0)])
-    m=diff(m, cyl_z(3.35, -1, 4.6, CW/2, WL+3.0))
+    # Gussets slope the OTHER WAY here. This part prints top-face-down, so its
+    # local +z is downward on the bed: what supports a pad is material at
+    # HIGHER local z, not lower. Copying case_lower's gusset would have hung it
+    # in the air and doubled the problem.
+    for (cx, cy, sx, sy) in PAD:
+        m=union([m, blk(cx, cx+7.0*sx, cy, cy+7.0*sy, 0, 5.0)])
+        m=union([m, prism_x([(cy, 12.0), (cy+7.0*sy, 5.0), (cy, 5.0)],
+                            min(cx, cx+7.0*sx), max(cx, cx+7.0*sx))])
+    # The mullion pad was CW/2 +/- 3.0 = x 43..49, and the drawers run to 43.00
+    # and from 49.00 - zero clearance over their bottom 5 mm, so it pinched
+    # them. Narrowed to +/- 2.4, which still carries the socket.
+    m=union([m, blk(*PAD_MULL_U, 0, 5.0)])
+    m=union([m, prism_x([(WL, 12.0), (WL+7.0, 5.0), (WL, 5.0)],
+                        PAD_MULL_U[0], PAD_MULL_U[1])])
+    for (hx, hy) in PIN_POS:
+        m=diff(m, cyl_z(PIN_SOCK, -1, 4.6, hx, hy))
 
     # ── OMMI FORGE mark, debossed into the top face ──
     # case_upper prints top-face-down, so the mark's edges form against the
@@ -333,6 +441,16 @@ def case_upper():
 RACK_L  = DR_D-6      # rack now runs nearly the full drawer
 RACK_Y0 = 3.0              # rack start in drawer-part Y
 PEG_D   = 3.0
+# ── the rack lives INSIDE the drawer bin, so it must fit inside it ──
+# The flange used to run -5.0 .. +8.0 in x and -3.0 .. L+3.0 in y, which is
+# larger than the bin it drops into in BOTH axes: it ploughed through the front
+# wall, the rear wall and 0.34 mm into the left side wall. The pegs sat at
+# x -4.5, which put a 3.25 hole 1.96 mm from the drawer's outer face and left
+# 0.33 mm of a 1.8 mm wall - less than one extrusion, so the slicer simply
+# deleted it and opened the side of the drawer.
+# Everything now grows INBOARD, away from the walls.
+RK_X0, RK_X1 = -4.0, 12.5   # flange, rack-local x
+PEG_X = 9.5                 # pegs, rack-local x - clear of the blade and the wall
 
 def drawer():
     """Prints floor-down, flat on the bed.
@@ -349,9 +467,10 @@ def drawer():
     # slot the rack blade passes through
     m=diff(m,blk(FIN_X-P["fin_t"]/2-0.25, FIN_X-P["fin_t"]/2+FIN_SPAN+0.25,
                  RACK_Y0-0.3, RACK_Y0+RACK_L+0.3, -1, P["dr_floor"]+1))
-    # locating peg holes either side of the slot
+    # locating peg holes, INBOARD of the slot - outboard put them 1.96 mm from
+    # the outer face and left 0.33 mm of wall
     for py in (RACK_Y0+5, RACK_Y0+RACK_L-5):
-        m=diff(m,cyl_z(PEG_D+0.25,-1,P["dr_floor"]+1,FIN_X-P["fin_t"]/2-4.5,py))
+        m=diff(m,cyl_z(PEG_D+0.25,-1,P["dr_floor"]+1,FIN_X-P["fin_t"]/2+PEG_X,py))
     if P["pull"] == "knob":
         m=diff(m,cyl_y(4.1,-1,P["dr_front"]+1,W/2,H*0.55))
     else:
@@ -366,12 +485,12 @@ def rack(assembly=True):
     down. Flipping a part between orientations mirrors a horizontal axis with it,
     so the flip happens once, at plating time, and never in the fit maths."""
     L=RACK_L; drop=P["fin_h"]+P["dr_floor"]
-    fl=blk(-5.0,P["fin_t"]+5.0,-3.0,L+3.0,0,2.0)
+    fl=blk(RK_X0,RK_X1,0.3,L-0.3,0,2.0)
     blade=rack_fin(L,h=drop)      # must reach the flange, not stop 1.8 mm short
     blade.apply_translation([0,0,-drop])
     m=union([fl,blade])
     for py in (5.0,L-5.0):
-        m=union([m,cyl_z(PEG_D,-P["dr_floor"],0,-4.5,py)])
+        m=union([m,cyl_z(PEG_D,-P["dr_floor"],0,PEG_X,py)])
     if not assembly:                       # print pose: flange flat on the bed
         m.apply_transform(trimesh.transformations.rotation_matrix(math.pi,[1,0,0]))
         m.apply_translation(-m.bounds[0])
@@ -430,7 +549,10 @@ parts={"case_lower":rep("case_lower",case_lower()),
        "knob":rep("knob",knob()),
        "logo_inlay":rep("logo_inlay",logo_inlay()),"pinion":rep("pinion",pinion())}
 
-FLIP={"case_upper"}          # printed top-face-down
+FLIP={"case_upper",          # top face down: crispest surface the machine makes
+      "pinion"}              # gear face down. Horn pocket up: pocket-down left
+                             # the first 2.1 mm as two loose crescents on the
+                             # bed, and 31% bed contact on a part with teeth.
 
 def bed_ratio(m,name=""):
     if name in FLIP:
@@ -452,7 +574,7 @@ def chk(l,c,d):
     if not c: fails.append(l)
 
 d0=parts["drawer"]
-Y_CLOSED=7.8           # drawer sits this far back so the pinion has room
+Y_CLOSED=4.0           # drawer sits this far back so the pinion has room
 y_closed=Y_CLOSED
 # assembly pose: drawer floor on the deck, rack flipped blade-down through it
 # the case is three parts now; assemble them for the interference sweep
@@ -463,6 +585,16 @@ CASE_ASM=trimesh.util.concatenate([_lo,_dk,_up])
 
 rk=rack(assembly=True)
 rk.apply_translation([FIN_X-P["fin_t"]/2, RACK_Y0, DECK+P["dr_floor"]+0.2])
+
+# ── does the rack fit INSIDE the drawer it bolts into? ──
+# This is the check that was missing. Both this file and preflight.py
+# concatenated drawer+rack into one "moving" body before testing it against
+# the world, so neither could ever see the two hit EACH OTHER - and they did,
+# by 155 mm3. A part must clear its own mating part before anything else.
+_rk_local = rack(assembly=True)
+_rk_local.apply_translation([FIN_X-P["fin_t"]/2, RACK_Y0, P["dr_floor"]])
+_self = float(trimesh.boolean.intersection([d0, _rk_local], engine="manifold").volume)
+chk("rack fits inside its own drawer", _self < 1.0, f"{_self:.2f} mm3")
 worst,wy,wslot=0.0,None,None
 for slot,dx in enumerate(DR_X):
     for pull in (0,8,16,TRAVEL):
@@ -498,10 +630,27 @@ chk("fin still keyed in the deck slot",fin_in_slot>=20.0,
     f"{fin_in_slot:.1f} mm of fin inside the slot at full travel")
 chk("drawer still supported by the deck",DR_D-TRAVEL>=20.0,
     f"{DR_D-TRAVEL:.1f} of {DR_D:.1f} mm still on the deck")
-chk("servo fits under the deck",P["sg_h"]+WL<=P["deck_z"],f"{P['sg_h']+WL:.1f} of {P['deck_z']:.1f}")
+chk("servo fits under the deck",P["sg_h"]+SG_BASE<=P["deck_z"],f"{P['sg_h']+SG_BASE:.1f} of {P['deck_z']:.1f}")
 chk("ESP+breadboard clears the deck",
     P["floor_t"]+P["esp_h"] <= P["deck_z"]-1.0,
     f"stack top {P['floor_t']+P['esp_h']:.1f}, deck underside {P['deck_z']:.1f}")
+# ── the Z stack-up that nothing used to check ──
+# The pinion's height is set by the servo, the rack's by the drawer, and the
+# two have to overlap over the gear's full face. Neither was ever computed:
+# preflight hard-coded the pinion height and "passed" on 4.4 mm of a 5.0 face.
+BLADE_TOP = DECK + P["dr_floor"] + 0.2
+BLADE_BOT = BLADE_TOP - (P["fin_h"] + P["dr_floor"])
+DECK_UND  = DECK - P["deck_t"]
+GEAR_Z0, GEAR_Z1 = SG_HORN, SG_HORN + P["gear_t"]
+chk("gear face fully inside the rack's teeth", BLADE_BOT <= GEAR_Z0 and GEAR_Z1 <= DECK_UND,
+    f"gear {GEAR_Z0:.1f}-{GEAR_Z1:.1f} in band {BLADE_BOT:.1f}-{DECK_UND:.1f}")
+chk("rack blade clears the electronics", BLADE_BOT >= P["floor_t"]+P["esp_h"]+1.5,
+    f"blade bottom {BLADE_BOT:.1f}, stack top {P['floor_t']+P['esp_h']:.1f}")
+chk("pinion clears the drawer floor", GEAR_Z1 <= DECK+0.2,
+    f"pinion top {GEAR_Z1:.1f}, drawer underside {DECK+0.2:.1f}")
+# involute sanity: a tip thinner than one extrusion is a tip the machine rounds
+_tip = 2*tooth_half_angle(R_TIP)*R_TIP
+chk("pinion tooth tip is printable", _tip >= 0.60, f"{_tip:.3f} mm at the tip")
 chk("the two servos do not clash",
     (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),
     f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
@@ -511,6 +660,49 @@ for n,m in parts.items():
     nb=len(m.split(only_watertight=False))
     chk(f"{n} is one solid piece",nb==1,
         f"{nb} bodies" + ("" if nb==1 else "  <-- something is detached"))
+def neck(m, name="", lo=0.15, hi=2.0, step=0.05):
+    """Narrowest neck in the FIRST LAYERS, measured by erosion.
+
+    Watertight and single-body both PASS on a part hanging together by 0.6 mm -
+    that is exactly how the deck shipped with its whole left bearing finger on
+    a 0.60 mm thread. Erode the first-layer footprint until it falls apart;
+    twice that erosion is the neck.
+
+    This is deliberately a BED test, not a whole-part test. What it is looking
+    for is the part that breaks when you lever it off the plate, and it has to
+    be measured in the print pose - so parts printed upside down get flipped
+    first, or the test reads a face that never touches the bed."""
+    if name in FLIP:
+        m = m.copy()
+        m.apply_transform(trimesh.transformations.rotation_matrix(math.pi,[1,0,0]))
+    sec = m.section(plane_origin=[0,0,m.bounds[0][2]+0.25], plane_normal=[0,0,1])
+    if sec is None:
+        return hi, None
+    try:
+        g = unary_union(list(sec.to_planar()[0].polygons_full))
+    except Exception:
+        return hi, None
+    e = lo
+    while e <= hi:
+        b = g.buffer(-e)
+        # Fragments under 2 mm2 are shapely noise, not geometry - eroding the
+        # 1011-vertex logo outline throws off 0.001 mm2 specks that appear at
+        # 0.10, vanish at 0.30 and come back at 0.65. A real neck, once parted,
+        # stays parted. Only count pieces big enough to be a piece.
+        qs = [q for q in (list(b.geoms) if hasattr(b, "geoms") else
+                          ([] if b.is_empty else [b])) if q.area >= 2.0]
+        if len(qs) != 1:
+            sm = min(qs, key=lambda q: q.area) if qs else None
+            return 2*e, (tuple(round(v,1) for v in sm.bounds) if sm is not None else None)
+        e += step
+    return hi, None
+
+for n,m in parts.items():
+    w,where=neck(m,n)
+    # 3 perimeters at 0.42 is 1.26; anything under that is a snap waiting to
+    # happen, and it snaps on bed removal rather than in service
+    chk(f"{n} has no thin neck", w >= 1.3,
+        f"narrowest {w:.2f} mm" + ("" if w >= 1.3 else f"  <-- parts at {where}"))
 for n,m in parts.items():
     r=bed_ratio(m,n)
     # a part shorter than its own footprint cannot topple however it is pocketed,

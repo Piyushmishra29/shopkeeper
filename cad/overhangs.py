@@ -20,7 +20,11 @@ def land(m):
         m.apply_translation(-m.bounds[0])
     return m
 
-FLIP = {"case_upper.stl"}      # printed top-face-down; score it that way
+FLIP = {"case_upper.stl",      # printed top-face-down; score it that way
+        "pinion.stl"}          # gear face down, horn pocket up - scored the
+                               # other way it reports the pocket roof as a
+                               # 111 mm2 overhang that does not exist in the
+                               # pose it actually prints in
 
 # 45 deg is the accepted self-supporting limit and has normal_z = -0.7071,
 # so a -0.70 threshold flags every deliberate 45 deg chamfer. -0.75 leaves
