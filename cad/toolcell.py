@@ -148,17 +148,20 @@ def hinge_carrier():
 
 # ───────────────────── PART 2: flap ─────────────────────
 def flap():
-    z0, z1 = AZ - P["flap_t"]/2, AZ + P["flap_t"]/2
+    # The plate hangs BELOW the hinge axis, not centred on it, so every
+    # feature shares one flat bottom face at z = AZ - flap_t. Without this
+    # the drive arm reaches under the plate and the first layer prints in air.
+    z0, z1 = AZ - P["flap_t"], AZ
     plate = blk(0, FLAP_W, AY, AY + FLAP_D, z0, z1)
 
-    # drive arm: plate perpendicular to X at the servo end
-    arm = blk(-P["arm_t"], 0, AY, AY + 24, AZ - 11, AZ + 11)
+    # drive arm: plate perpendicular to X at the servo end, rising above z1
+    arm = blk(-P["arm_t"], 0, AY + 5, AY + 21, z0, AZ + 4.5)
     holes = [cyl_x(P["arm_hole_dia"], -P["arm_t"]-1, 1, AY + r, AZ)
              for r in P["arm_holes_r"]]
 
-    # stub axle at the post end
+    # stub axle at the post end, embedded in a boss that also reaches z0
     bl = P["boss_len"]
-    boss = blk(FLAP_W, FLAP_W + bl, AY - 3, AY + 9, AZ - 6, AZ + 6)
+    boss = blk(FLAP_W, FLAP_W + bl, AY - 3.5, AY + 8, z0, AZ + 3.5)
     axle = cyl_x(P["axle_dia"] - 0.15, FLAP_W + bl,
                  FLAP_W + bl + P["axle_len"], AY, AZ)
 
@@ -169,7 +172,7 @@ def flap():
 
 # ───────────────────── PART 3: bin divider ─────────────────────
 def bin_divider():
-    return blk(-1.5, 1.5, 0, FLAP_D + 2, 0, AZ - P["flap_t"]/2 - 1.0)
+    return blk(-1.5, 1.5, 0, FLAP_D + 2, 0, AZ - P["flap_t"] - 1.0)
 
 # ───────────────────── PART 4: servo retainer bar ─────────────────────
 def retainer():
@@ -228,23 +231,48 @@ print(f"    [INFO] flap tip at 66 deg reaches z={tip_z:.0f} mm "
       f"-> {tip_z - P['drawer_h']:.0f} mm above the drawer lip. "
       f"Drawer MUST be at full extension.")
 print(f"    {'ALL CHECKS PASSED' if ok else '*** CHECKS FAILED ***'}\n")
-parts = {}
-parts["hinge_carrier"] = report("hinge_carrier", hinge_carrier())
-parts["flap"]          = report("flap",          flap())
-parts["bin_divider"]   = report("bin_divider",   bin_divider())
-parts["servo_retainer"]= report("servo_retainer",retainer())
+def bed_area(m):
+    """Area of downward-facing faces sitting on the lowest plane."""
+    zmin = m.bounds[0][2]
+    n = m.face_normals[:, 2]
+    zc = m.triangles_center[:, 2]
+    sel = (n < -0.9) & (zc < zmin + 0.15)
+    return float(m.area_faces[sel].sum())
 
-# combined 3MF, laid out on a plate
+def to_bed(m):
+    """Drop to z=0 and move the min corner to the origin — print coords."""
+    m = m.copy()
+    m.apply_translation(-m.bounds[0])
+    return m
+
+def place(m, x, y):
+    m = m.copy(); m.apply_translation([x, y, 0]); return m
+
+parts = {}
+for name, fn in [("hinge_carrier", hinge_carrier), ("flap", flap),
+                 ("bin_divider", bin_divider), ("servo_retainer", retainer)]:
+    parts[name] = to_bed(report(name, fn()))
+
+print("\n  BED CONTACT  (a part with almost none prints in mid-air)")
+for name, m in parts.items():
+    a  = bed_area(m)
+    fp = m.extents[0] * m.extents[1]
+    pc = 100 * a / fp if fp else 0
+    flag = "ok" if pc >= 8 else "*** TOO LITTLE ***"
+    print(f"    {name:16s} {a:7.1f} mm2  = {pc:5.1f}% of footprint   {flag}")
+
+# combined 3MF, laid out flat on a 256 mm plate, everything at z = 0
+LAYOUT = [("hinge_carrier", parts["hinge_carrier"],  10,  10),
+          ("flap_A",        parts["flap"],           10,  45),
+          ("flap_B",        parts["flap"],           70,  45),
+          ("bin_divider",   parts["bin_divider"],   130,  45),
+          ("retainer_A",    parts["servo_retainer"],145, 135),
+          ("retainer_B",    parts["servo_retainer"],185, 135)]
 scene = trimesh.Scene()
-scene.add_geometry(parts["hinge_carrier"], node_name="hinge_carrier")
-f1 = parts["flap"].copy(); f1.apply_translation([0, 30, 0])
-f2 = parts["flap"].copy(); f2.apply_translation([0, 110, 0])
-scene.add_geometry(f1, node_name="flap_A")
-scene.add_geometry(f2, node_name="flap_B")
-d = parts["bin_divider"].copy(); d.apply_translation([W/2, 30, 0])
-scene.add_geometry(d, node_name="bin_divider")
-for i in range(2):
-    r = parts["servo_retainer"].copy(); r.apply_translation([40 + i*50, 200, 0])
-    scene.add_geometry(r, node_name=f"retainer_{i}")
+for nm, m, x, y in LAYOUT:
+    scene.add_geometry(place(m, x, y), node_name=nm)
+b = scene.bounds
+print(f"\n  plate envelope  {b[1][0]:.0f} x {b[1][1]:.0f} x {b[1][2]:.0f} mm"
+      f"   z-min {b[0][2]:.2f} (must be 0.00)")
 scene.export(os.path.join(OUT, "toolcell_parts.3mf"))
-print(f"\n  wrote {OUT}/toolcell_parts.3mf")
+print(f"  wrote {OUT}/toolcell_parts.3mf")
