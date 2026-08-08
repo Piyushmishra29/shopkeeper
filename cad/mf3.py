@@ -19,7 +19,7 @@ RELS = ('<?xml version="1.0" encoding="UTF-8"?>\n'
         '</Relationships>')
 
 
-def write_3mf(path, items, materials=None):
+def write_3mf(path, items, materials=None, extruder=1):
     """items: (name, mesh, x, y) or (name, mesh, x, y, material_index).
     materials: list of (name, "#RRGGBBAA"). Mesh must already sit at z=0."""
     res, build = [], []
@@ -45,10 +45,27 @@ def write_3mf(path, items, materials=None):
            '<metadata name="Application">ToolCell generator</metadata>'
            f'<resources>{mat}{"".join(res)}</resources>'
            f'<build>{"".join(build)}</build></model>')
+    # Bambu will not slice objects whose filament is unstated - it asks for a
+    # mapping it has nothing to map. Assign every object to filament 1
+    # explicitly. This is single-filament: no basematerials, one extruder.
+    cfg = ['<?xml version="1.0" encoding="UTF-8"?>', "<config>"]
+    for i, it in enumerate(items, start=1):
+        cfg.append(f'<object id="{i}">'
+                   f'<metadata key="name" value="{it[0]}"/>'
+                   f'<metadata key="extruder" value="{extruder}"/>'
+                   f'<part id="{i}" subtype="normal_part">'
+                   f'<metadata key="name" value="{it[0]}"/>'
+                   f'<metadata key="extruder" value="{extruder}"/>'
+                   f'</part></object>')
+    cfg.append("</config>")
+    ct = CT.replace('</Types>',
+                    '<Default Extension="config" ContentType="application/xml"/>'
+                    '</Types>')
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", CT)
+        z.writestr("[Content_Types].xml", ct)
         z.writestr("_rels/.rels", RELS)
         z.writestr("3D/3dmodel.model", xml)
+        z.writestr("Metadata/model_settings.config", "".join(cfg))
     return len(items)
 
 
