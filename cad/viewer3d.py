@@ -1,0 +1,865 @@
+#!/usr/bin/env python3
+"""
+viewer3d.py — build a fully self-contained interactive 3D viewer for shopkeeper NANO.
+
+Loads the real STLs out of ../nano, decimates only where it is safe to do so
+(volume must be preserved, or the lightening holes in case_lower collapse into
+solid slabs), quantises the vertices to 0.01 mm integers, and writes a single
+HTML *fragment* containing a hand-rolled canvas-2D painter's-algorithm renderer.
+
+No CDN, no external script, no font, no network call of any kind: the whole
+thing is one <style> + one <div> + one <script>.
+
+The assembly poses are the ones nano.py itself uses for its boolean
+interference sweep (see the block around "assembly pose: drawer floor on the
+deck"), re-derived here from the same parameter dict and then ASSERTED against
+the bounds of the exported STLs, so what is drawn is what was verified.
+"""
+import os, sys, math, json
+import numpy as np
+import trimesh
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STL  = os.path.normpath(os.path.join(HERE, "..", "nano"))
+OUT  = os.path.normpath(os.path.join(
+    HERE, "..", ".superpowers", "brainstorm", "25158-1786171087",
+    "content", "viewer3d.html"))
+
+# ────────────────────────────────────────────────────────────────────────────
+# 1.  Parameters — copied verbatim from cad/nano.py
+# ────────────────────────────────────────────────────────────────────────────
+P = dict(
+    cw=92.0, cd=66.0, ch=60.0, wall=2.0, floor_t=1.4,
+    deck_z=33.0, deck_t=2.5,
+    dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
+    side_clear=1.2, mid_gap=6.0,
+    module=1.25, teeth=12, press=math.radians(14.5),
+    gear_t=5.0, backlash=0.30,
+    fin_t=3.0, fin_h=8.0,
+    sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
+    clear=0.35, gap=0.8,
+    pull="cut",
+)
+M, N   = P["module"], P["teeth"]
+R_P    = M*N/2
+R_TIP, R_ROOT = R_P+M, R_P-1.25*M
+PITCH  = math.pi*M
+TRAVEL = math.pi*R_P                              # 23.56 mm
+TOOTH_H  = 2.25*M
+FIN_SPAN = P["fin_t"] + TOOTH_H
+
+CW, CD, CH, WL = P["cw"], P["cd"], P["ch"], P["wall"]
+DECK   = P["deck_z"] + P["deck_t"]                # 35.5  top of the deck
+DR_D   = CD - WL - 9.0                            # 55
+DR_TOP = DECK + P["dr_h"]
+INNER  = CW - 2*WL
+DR_W   = (INNER - P["mid_gap"] - 2*P["side_clear"]) / 2
+DR_X   = (WL + P["side_clear"],
+          WL + P["side_clear"] + DR_W + P["mid_gap"])
+FIN_X  = DR_W * 0.30
+PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P
+PIN_Y  = 28.5
+RACK_L  = DR_D - 16
+RACK_Y0 = 8.0
+DENSITY = 1.27                                    # g/cm3, same figure nano.py prints
+
+# rack.stl was exported from rack(assembly=False) — print pose. These are the
+# analytic bounds of rack(assembly=True), the pose used in the sweep.
+RACK_ASM_MIN = np.array([-6.0, -3.0, -(P["fin_h"] + P["dr_floor"])])   # (-6,-3,-9.8)
+
+# nano.py never places the pinion (it is not part of the interference sweep),
+# so its Z is derived here: sit the 5 mm gear body against the toothed blade
+# and land the 5 mm hub flush under the drawer floor.
+PIN_Z = DECK + 0.2 - (P["gear_t"] + 5.0)          # 25.7
+
+# ────────────────────────────────────────────────────────────────────────────
+# 2.  Load, sanity-check, decimate
+# ────────────────────────────────────────────────────────────────────────────
+NAMES = ["case_lower", "case_upper", "deck", "drawer", "rack", "pinion", "knob"]
+# keep = leave the mesh alone; the STLs are already low-poly.
+TARGET = {"case_lower": 1400}
+
+raw = {}
+for n in NAMES:
+    m = trimesh.load(os.path.join(STL, n + ".stl"), process=True)
+    assert isinstance(m, trimesh.Trimesh), n
+    assert m.volume > 0, f"{n}: winding is inside-out"
+    raw[n] = m
+
+def close(a, b, tol=1e-6):
+    return abs(a - b) <= tol
+
+# assert the derived assembly numbers against the real exported geometry
+e = raw["drawer"].extents
+assert np.allclose(e, [DR_W, DR_D, P["dr_h"]], atol=1e-6), f"drawer {e} != {DR_W,DR_D,P['dr_h']}"
+e = raw["deck"].extents
+assert np.allclose(e, [CW-2*WL-0.6, CD-2*WL-0.6, P["deck_t"]], atol=1e-6), f"deck {e}"
+e = raw["case_lower"].extents
+assert np.allclose(e, [CW, CD, DECK], atol=1e-6), f"case_lower {e}"
+e = raw["case_upper"].extents
+assert np.allclose(e, [CW, CD, CH-DECK], atol=1e-6), f"case_upper {e}"
+e = raw["rack"].extents
+assert np.allclose(e, [14.0, RACK_L+6.0, P["fin_h"]+P["dr_floor"]+2.0], atol=1e-6), f"rack {e}"
+
+# nano.py:  y_closed = (CD-WL-1.2) - drawer.extents[1]
+Y_CLOSED = (CD - WL - 1.2) - float(raw["drawer"].extents[1])
+assert close(Y_CLOSED, 7.8), Y_CLOSED
+
+def decimate(m, target, tol=0.03):
+    """Decimate, but only accept a result that still encloses the same volume.
+    fast_simplification will happily weld the lightening holes shut; that shows
+    up as a volume jump, so we back the target off until it stops happening."""
+    nf = len(m.faces)
+    if target is None or nf <= target:
+        return m, nf, False
+    t = float(target)
+    while t <= nf:
+        try:
+            s = m.simplify_quadric_decimation(face_count=int(t))
+        except Exception as ex:                       # no fast_simplification
+            print(f"    ! decimation unavailable ({ex}) — keeping {nf} faces")
+            return m, nf, False
+        ok = (s.volume > 0
+              and abs(s.volume - m.volume) / m.volume < tol
+              and np.allclose(s.extents, m.extents, atol=0.6))
+        if ok:
+            return s, len(s.faces), True
+        t = t * 1.15 + 40
+    return m, nf, False
+
+def quantise(m):
+    """0.01 mm integer vertices, welded, degenerate faces dropped."""
+    V = np.rint(np.asarray(m.vertices) * 100.0).astype(np.int64)
+    uniq, inv = np.unique(V, axis=0, return_inverse=True)
+    inv = np.asarray(inv).ravel()
+    F = inv[np.asarray(m.faces)]
+    a, b, c = uniq[F[:, 0]], uniq[F[:, 1]], uniq[F[:, 2]]
+    nrm = np.cross(b - a, c - a)
+    F = F[(nrm ** 2).sum(1) > 0]
+    # signed volume of the quantised shell must stay positive => outward winding
+    a, b, c = uniq[F[:, 0]] / 100.0, uniq[F[:, 1]] / 100.0, uniq[F[:, 2]] / 100.0
+    vol = float(np.einsum('ij,ij->i', a, np.cross(b, c)).sum() / 6.0)
+    assert vol > 0, "quantised mesh has inverted winding"
+    return uniq, F, vol
+
+print("shopkeeper NANO — 3D viewer\n")
+geo, tris, grams = {}, {}, {}
+for n in NAMES:
+    m = raw[n]
+    grams[n] = m.volume / 1000.0 * DENSITY
+    if n == "knob":
+        # the knob plugs into the drawer FACE, so stand its axis along +Y
+        m = m.copy()
+        m.apply_transform(trimesh.transformations.rotation_matrix(-math.pi/2, [1, 0, 0]))
+        m.apply_translation([0, -m.bounds[0][1], 0])
+    if n == "rack":
+        # print pose -> assembly pose: flip about X, land on the analytic min
+        m = m.copy()
+        m.apply_transform(trimesh.transformations.rotation_matrix(math.pi, [1, 0, 0]))
+        m.apply_translation(-m.bounds[0] + RACK_ASM_MIN)
+        assert np.allclose(m.bounds[0], RACK_ASM_MIN, atol=1e-6), m.bounds
+        assert np.allclose(m.bounds[1], [8.0, RACK_L + 3.0, 2.0], atol=1e-6), m.bounds
+    s, nf, did = decimate(m, TARGET.get(n))
+    V, F, vol = quantise(s)
+    geo[n] = {"v": V.reshape(-1).tolist(), "f": F.reshape(-1).tolist()}
+    tris[n] = int(len(F))
+    print(f"  {n:11s} {len(m.faces):5d} -> {tris[n]:5d} tri   {len(V):5d} vtx   "
+          f"{grams[n]:5.2f} g   {'decimated' if did else 'as printed'}")
+
+# ────────────────────────────────────────────────────────────────────────────
+# 3.  Assembly + exploded transforms
+# ────────────────────────────────────────────────────────────────────────────
+# base pose at pull = 0, exactly as nano.py's sweep builds it
+KNOB_Y = 0.2      # neck butts the drawer face, 4.1 mm stem enters at y = 7.8
+
+INST = []
+def add(part, t, ex, pull=0, spin=0, lab=None, ly=0, show=0):
+    INST.append({"p": part, "t": [round(v, 4) for v in t],
+                 "ex": [round(v, 4) for v in ex],
+                 "pull": pull, "spin": spin,
+                 "lab": lab, "ly": ly, "show": show})
+
+add("case_lower", (0, 0, 0),                              (0, 0, 0),      lab="case_lower", ly=64)
+add("deck",       (WL+0.3, WL+0.3, DECK-P["deck_t"]),     (0, 0, 40),     lab="deck",       ly=0)
+add("case_upper", (0, 0, DECK),                           (0, 0, 92),     lab="case_upper", ly=-46)
+
+for i, dx in enumerate(DR_X):
+    side = -1 if i == 0 else 1
+    add("drawer", (dx,               Y_CLOSED,       DECK + 0.2),
+        (side*18, -62, 68), pull=1, lab=("drawer" if i == 0 else None), ly=-30)
+    add("rack",   (dx + FIN_X - P["fin_t"]/2, RACK_Y0 + Y_CLOSED, DECK + P["dr_floor"] + 0.2),
+        (side*18, -62, 44), pull=1, lab=("rack" if i == 0 else None), ly=0)
+    add("pinion", (dx + FIN_X + PIN_DX, WL + PIN_Y,     PIN_Z),
+        (side*18, -62, 22), spin=1, lab=("pinion" if i == 0 else None), ly=26)
+
+add("knob", (DR_X[1] + DR_W/2, KNOB_Y, DECK + 0.2 + P["dr_h"]*0.55),
+    (18, -78, 66), lab="knob", ly=0, show=1)
+
+# camera fit for both states, with the drawers at full stroke so nothing
+# swings out of frame when they open
+def fit(explode):
+    lo = np.array([1e9]*3); hi = np.array([-1e9]*3)
+    for d in INST:
+        if d["show"] == 1 and not explode:
+            continue
+        V = np.array(geo[d["p"]]["v"], dtype=np.float64).reshape(-1, 3) / 100.0
+        if d["spin"]:
+            th = TRAVEL / R_P
+            c, s = math.cos(th), math.sin(th)
+            V = np.column_stack([c*V[:, 0] - s*V[:, 1], s*V[:, 0] + c*V[:, 1], V[:, 2]])
+        T = np.array(d["t"], dtype=np.float64)
+        if d["pull"]:
+            T = T + np.array([0.0, -TRAVEL, 0.0])
+        if explode:
+            T = T + np.array(d["ex"], dtype=np.float64)
+        W = V + T
+        lo = np.minimum(lo, W.min(0)); hi = np.maximum(hi, W.max(0))
+    c = (lo + hi) / 2.0
+    r = float(np.linalg.norm(hi - lo) / 2.0)
+    return [round(float(x), 3) for x in c], round(r, 3)
+
+fitA_c, fitA_r = fit(False)
+fitE_c, fitE_r = fit(True)
+print(f"\n  fit assembled  c={fitA_c} r={fitA_r}")
+print(f"  fit exploded   c={fitE_c} r={fitE_r}")
+
+MAT = {"case_lower": "shellB", "case_upper": "shellA", "deck": "gold",
+       "drawer": "gold", "rack": "gold", "pinion": "gold", "knob": "gold"}
+COL = {"shellA": "#EDEDF2", "shellB": "#D8D8DF", "gold": "#F2B705"}
+
+QTY  = {"case_lower": 1, "case_upper": 1, "deck": 1,
+        "drawer": 2, "rack": 2, "pinion": 2, "knob": 2}
+BLURB = {
+ "case_lower": "mech bay, open top &mdash; servos, pinions, ESP32",
+ "case_upper": "drawer bay + top face, printed upside down",
+ "deck":       "2.5 mm plate the drawers ride on, slotted for both fins",
+ "drawer":     "42 &times; 55 &times; 18 bin, scalloped finger pull",
+ "rack":       "toothed blade, pegs through the drawer floor",
+ "pinion":     "m1.25 &times; 12T, bolts to the SG90 horn",
+ "knob":       "optional press-fit pull &mdash; unused with the scalloped cut",
+}
+
+TOTAL = sum(grams[n]*QTY[n] for n in NAMES if n != "knob")
+
+DATA = {
+    "parts": geo,
+    "inst":  INST,
+    "mat":   {n: MAT[n] for n in NAMES},
+    "col":   COL,
+    "travel": round(TRAVEL, 4),
+    "rp":    R_P,
+    "fitA":  {"c": fitA_c, "r": fitA_r},
+    "fitE":  {"c": fitE_c, "r": fitE_r},
+    "bom":   {n: {"q": QTY[n], "g": round(grams[n], 2), "t": tris[n]} for n in NAMES},
+}
+
+# ────────────────────────────────────────────────────────────────────────────
+# 4.  Emit
+# ────────────────────────────────────────────────────────────────────────────
+rows = []
+for n in NAMES:
+    rows.append(
+        '<li class="v3d-row" data-part="{n}">'
+        '<span class="v3d-sw" style="background:{c}"></span>'
+        '<span class="v3d-nm">{n}<em>&times;{q}</em></span>'
+        '<span class="v3d-gm">{g:.1f} g</span>'
+        '<span class="v3d-bl">{b}</span>'
+        '<span class="v3d-tr">{t} tri</span>'
+        '</li>'.format(n=n, c=COL[MAT[n]], q=QTY[n], g=grams[n],
+                       b=BLURB[n], t=tris[n]))
+ROWS = "\n      ".join(rows)
+
+CSS = r"""
+<style>
+.v3d { --gold:#F2B705; --ln:rgba(138,138,148,.32); font-synthesis:none; }
+.v3d h2 { margin:0 0 .35rem; font-size:1.35rem; letter-spacing:-.015em; }
+.v3d .v3d-sub { color:var(--text-secondary,#86868b); font-size:.86rem;
+                line-height:1.55; margin:0 0 1rem; max-width:70ch; }
+.v3d .v3d-sub code { font-size:.82em; padding:.1em .35em; border-radius:4px;
+                background:var(--bg-tertiary,#e5e5e7); }
+
+.v3d-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem .9rem;
+           margin-bottom:.75rem; }
+.v3d-seg { display:inline-flex; border:1px solid var(--border,#d1d1d6);
+           border-radius:8px; overflow:hidden; }
+.v3d-seg button { appearance:none; border:0; background:transparent; cursor:pointer;
+           font:inherit; font-size:.8rem; padding:.42rem .85rem;
+           color:var(--text-secondary,#86868b); }
+.v3d-seg button + button { border-left:1px solid var(--border,#d1d1d6); }
+.v3d-seg button.on { background:var(--accent,#0071e3); color:#fff; }
+.v3d-btn { appearance:none; font:inherit; font-size:.8rem; cursor:pointer;
+           padding:.42rem .8rem; border-radius:8px;
+           border:1px solid var(--border,#d1d1d6);
+           background:var(--bg-secondary,#fff); color:var(--text-primary,#1d1d1f); }
+.v3d-btn.on { background:var(--accent,#0071e3); border-color:var(--accent,#0071e3); color:#fff; }
+.v3d-slide { display:inline-flex; align-items:center; gap:.5rem; font-size:.78rem;
+             color:var(--text-secondary,#86868b); }
+.v3d-slide input { width:150px; accent-color:var(--gold); }
+.v3d-slide output { font-variant-numeric:tabular-nums; min-width:5.4em;
+                    color:var(--text-primary,#1d1d1f); font-weight:600; }
+
+.v3d-main { display:flex; gap:1rem; align-items:stretch; }
+.v3d-stage { position:relative; flex:1 1 auto; min-width:0;
+             height:clamp(340px,54vh,560px); border-radius:12px; overflow:hidden;
+             border:1px solid var(--border,#d1d1d6); background:#111116; }
+.v3d-stage canvas { display:block; width:100%; height:100%; touch-action:none;
+                    cursor:grab; }
+.v3d-stage canvas.drag { cursor:grabbing; }
+.v3d-labels { position:absolute; inset:0; pointer-events:none; }
+.v3d-lab { position:absolute; white-space:nowrap; font-size:.7rem; line-height:1.25;
+           padding:.22rem .45rem; border-radius:6px; opacity:0;
+           transition:opacity .18s linear;
+           background:rgba(14,14,18,.82); color:#f4f4f6;
+           border:1px solid rgba(255,255,255,.14);
+           backdrop-filter:blur(3px); }
+.v3d-lab b { font-weight:650; letter-spacing:.01em; }
+.v3d-lab i { font-style:normal; opacity:.6; }
+.v3d-lab u { text-decoration:none; color:var(--gold); font-variant-numeric:tabular-nums; }
+.v3d-hint { position:absolute; left:10px; bottom:9px; font-size:.66rem;
+            color:rgba(255,255,255,.42); pointer-events:none; letter-spacing:.02em; }
+.v3d-scale { position:absolute; right:10px; bottom:9px; font-size:.66rem;
+             color:rgba(255,255,255,.42); pointer-events:none; }
+
+.v3d-side { flex:0 0 268px; }
+.v3d-side h4 { margin:0 0 .5rem; font-size:.7rem; text-transform:uppercase;
+               letter-spacing:.09em; color:var(--text-tertiary,#aeaeb2); }
+.v3d-bom { list-style:none; margin:0; padding:0;
+           border:1px solid var(--border,#d1d1d6); border-radius:10px; overflow:hidden; }
+.v3d-row { display:grid; grid-template-columns:12px 1fr auto;
+           gap:.15rem .5rem; padding:.45rem .6rem; cursor:default;
+           border-top:1px solid var(--border,#d1d1d6); }
+.v3d-row:first-child { border-top:0; }
+.v3d-row:hover { background:var(--bg-tertiary,#e5e5e7); }
+.v3d-sw { width:12px; height:12px; border-radius:3px; margin-top:2px;
+          border:1px solid rgba(0,0,0,.22); }
+.v3d-nm { font-size:.78rem; font-weight:600; }
+.v3d-nm em { font-style:normal; font-weight:400; opacity:.5; margin-left:.35em; }
+.v3d-gm { font-size:.78rem; font-variant-numeric:tabular-nums; font-weight:600;
+          color:var(--gold); }
+.v3d-bl { grid-column:2/4; font-size:.68rem; line-height:1.4;
+          color:var(--text-secondary,#86868b); }
+.v3d-tr { grid-column:2/4; font-size:.62rem; color:var(--text-tertiary,#aeaeb2);
+          letter-spacing:.03em; }
+.v3d-tot { margin-top:.55rem; font-size:.74rem; display:flex;
+           justify-content:space-between; color:var(--text-secondary,#86868b); }
+.v3d-tot b { color:var(--text-primary,#1d1d1f); font-variant-numeric:tabular-nums; }
+.v3d-note { font-size:.68rem; line-height:1.55; margin:.7rem 0 0;
+            color:var(--text-tertiary,#aeaeb2); }
+
+@media (max-width:820px){
+  .v3d-main { flex-direction:column; }
+  .v3d-side { flex:1 1 auto; }
+  .v3d-stage { height:clamp(300px,46vh,440px); }
+}
+</style>
+"""
+
+BODY = r"""
+<div class="v3d" id="v3d-root">
+  <h2>shopkeeper NANO &mdash; the real meshes, in 3D</h2>
+  <p class="v3d-sub">Every triangle below comes out of the STLs in <code>nano/</code>.
+    The poses are the ones <code>nano.py</code> uses for its boolean interference
+    sweep, so what you are orbiting is exactly what was checked. Drag to orbit,
+    scroll to zoom, and run the drawers out their full __TRAVEL__ mm of stroke &mdash;
+    one turn of a 12&#8209;tooth pinion.</p>
+
+  <div class="v3d-bar">
+    <div class="v3d-seg" id="v3d-seg">
+      <button data-m="0" class="on">Assembled</button>
+      <button data-m="1">Exploded</button>
+    </div>
+    <label class="v3d-slide">drawer travel
+      <input type="range" id="v3d-pull" min="0" max="__TRAVEL__" step="0.01" value="0">
+      <output id="v3d-pullv">0.00 mm</output>
+    </label>
+    <button class="v3d-btn on" id="v3d-play">&#9646;&#9646; drive</button>
+    <button class="v3d-btn" id="v3d-reset">reset view</button>
+  </div>
+
+  <div class="v3d-main">
+    <div class="v3d-stage" id="v3d-stage">
+      <canvas id="v3d-cv"></canvas>
+      <div class="v3d-labels" id="v3d-labels"></div>
+      <div class="v3d-hint">drag &middot; orbit &nbsp;|&nbsp; scroll &middot; zoom &nbsp;|&nbsp; shift+drag &middot; pan</div>
+      <div class="v3d-scale">grid 10 mm</div>
+    </div>
+    <aside class="v3d-side">
+      <h4>Parts &amp; printed weight</h4>
+      <ul class="v3d-bom" id="v3d-bom">
+      __ROWS__
+      </ul>
+      <div class="v3d-tot"><span>build total, knobs excluded</span><b>__TOTAL__ g solid</b></div>
+      <div class="v3d-tot"><span>&approx; sliced</span><b>__SLICED__ g</b></div>
+      <p class="v3d-note">White is plate 1, yellow plate 2 &mdash; one colour per plate,
+        zero filament changes. Hover a row to isolate that part.
+        Closed, the drawer face sits 7.8&nbsp;mm inside the mouth; open, it stands
+        __TRAVEL__&nbsp;mm proud of that. <code>nano.py</code> does not place the pinion,
+        so its height here is derived: gear body against the blade, hub flush under
+        the drawer floor.</p>
+    </aside>
+  </div>
+</div>
+"""
+
+JS = r"""
+<script>
+(function () {
+"use strict";
+var ROOT = document.getElementById('v3d-root');
+if (!ROOT || ROOT.__v3d) return;
+ROOT.__v3d = 1;
+
+var D = __DATA__;
+
+/* ── geometry ─────────────────────────────────────────────────────────── */
+var PARTS = {};
+Object.keys(D.parts).forEach(function (k) {
+  var p = D.parts[k], nv = p.v.length, V = new Float32Array(nv), i;
+  for (i = 0; i < nv; i++) V[i] = p.v[i] * 0.01;
+  var F = (nv / 3 > 65535) ? new Uint32Array(p.f) : new Uint16Array(p.f);
+  PARTS[k] = { V: V, F: F, nv: nv / 3, nf: F.length / 3 };
+});
+
+var INST = [], MAXT = 0;
+D.inst.forEach(function (d) {
+  var P = PARTS[d.p], n = P.nv;
+  INST.push({
+    d: d, P: P, part: d.p, mat: D.mat[d.p],
+    wx: new Float32Array(n), wy: new Float32Array(n), wz: new Float32Array(n),
+    sx: new Float32Array(n), sy: new Float32Array(n), vz: new Float32Array(n),
+    ax: 0, ay: 0, seen: false, vis: true
+  });
+  MAXT += P.nf;
+});
+
+/* ── shading palettes ─────────────────────────────────────────────────── */
+var LEV = 88, SMAX = 1.95;
+function mkpal(hex) {
+  var r = parseInt(hex.substr(1, 2), 16),
+      g = parseInt(hex.substr(3, 2), 16),
+      b = parseInt(hex.substr(5, 2), 16), a = new Array(LEV), i;
+  for (i = 0; i < LEV; i++) {
+    var s = i / (LEV - 1) * SMAX, R, G, B, k;
+    if (s <= 1) { R = r * s; G = g * s; B = b * s; }
+    else { k = Math.min(1, (s - 1) * 0.72); R = r + (255 - r) * k; G = g + (255 - g) * k; B = b + (255 - b) * k; }
+    a[i] = 'rgb(' + (R | 0) + ',' + (G | 0) + ',' + (B | 0) + ')';
+  }
+  return a;
+}
+var PAL = {}, GH = mkpal('#7d7d88');
+Object.keys(D.col).forEach(function (k) { PAL[k] = mkpal(D.col[k]); });
+
+/* ── triangle buffers ─────────────────────────────────────────────────── */
+var tI = new Int32Array(MAXT), tF = new Int32Array(MAXT),
+    tS = new Uint8Array(MAXT), tD = new Float32Array(MAXT),
+    ord = new Array(MAXT), nt = 0;
+
+/* ── camera / state ───────────────────────────────────────────────────── */
+var az = 0.62, el = 0.36, zoom = 1, panx = 0, pany = 0;
+var mode = 0, exT = 0, exTarget = 0;
+var pull = 0, playing = true, phase = 0.06;
+var hi = null, dirty = true, last = 0;
+var FOV = 30 * Math.PI / 180;
+var TRAVEL = D.travel, RP = D.rp;
+var DEF = { az: 0.62, el: 0.36, zoom: 1, panx: 0, pany: 0 };
+
+var stage = document.getElementById('v3d-stage');
+var cv = document.getElementById('v3d-cv');
+var ctx = cv.getContext('2d', { alpha: false });
+var labWrap = document.getElementById('v3d-labels');
+var W = 0, H = 0, DPR = 1;
+
+/* ── labels ───────────────────────────────────────────────────────────── */
+var LABS = [];
+INST.forEach(function (I, i) {
+  if (!I.d.lab) return;
+  var b = D.bom[I.part];
+  var e = document.createElement('div');
+  e.className = 'v3d-lab';
+  e.innerHTML = '<b>' + I.part + '</b> <i>&times;' + b.q + '</i> &middot; <u>' +
+                b.g.toFixed(2) + ' g</u>';
+  labWrap.appendChild(e);
+  LABS.push({ i: i, el: e, ly: I.d.ly || 0, shown: false });
+});
+
+/* ── sizing ───────────────────────────────────────────────────────────── */
+function resize() {
+  var r = stage.getBoundingClientRect();
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(2, Math.round(r.width));
+  H = Math.max(2, Math.round(r.height));
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  dirty = true;
+}
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+window.addEventListener('resize', resize);
+
+/* ── theme ────────────────────────────────────────────────────────────── */
+var darkQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+function isDark() { return darkQ ? darkQ.matches : true; }
+if (darkQ && darkQ.addEventListener) darkQ.addEventListener('change', function () { dirty = true; });
+
+/* ── math helpers ─────────────────────────────────────────────────────── */
+function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+/* ── main draw ────────────────────────────────────────────────────────── */
+var GRID_N = 9, GRID_S = 20;   /* 9 cells of 20 mm each way, minor every 10 */
+
+function draw() {
+  if (!W) resize();
+  var t = ease(exT);
+  var cx = lerp(D.fitA.c[0], D.fitE.c[0], t) + panx,
+      cy = lerp(D.fitA.c[1], D.fitE.c[1], t) + pany,
+      cz = lerp(D.fitA.c[2], D.fitE.c[2], t),
+      rad = lerp(D.fitA.r, D.fitE.r, t);
+
+  var dist = rad / Math.sin(FOV / 2) * 1.04 * zoom;
+  var ce = Math.cos(el), se = Math.sin(el);
+  var eyeX = cx + dist * ce * Math.sin(az),
+      eyeY = cy - dist * ce * Math.cos(az),
+      eyeZ = cz + dist * se;
+
+  var fx = cx - eyeX, fy = cy - eyeY, fz = cz - eyeZ;
+  var fl = 1 / Math.sqrt(fx * fx + fy * fy + fz * fz); fx *= fl; fy *= fl; fz *= fl;
+  var rx = fy, ry = -fx, rz = 0;
+  var rl = 1 / Math.sqrt(rx * rx + ry * ry) || 1; rx *= rl; ry *= rl;
+  var ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
+
+  var S = (H / 2) / Math.tan(FOV / 2), hw = W / 2, hh = H / 2, NEAR = 0.5;
+
+  /* key light orbits with the camera so nothing is ever a black silhouette */
+  var la = az - 0.85, lc = Math.cos(0.62), ls = Math.sin(0.62);
+  var Lx = lc * Math.sin(la), Ly = -lc * Math.cos(la), Lz = ls;
+  var Hx = Lx - fx, Hy = Ly - fy, Hz = Lz - fz;
+  var hl = 1 / Math.sqrt(Hx * Hx + Hy * Hy + Hz * Hz); Hx *= hl; Hy *= hl; Hz *= hl;
+
+  /* background */
+  var dark = isDark();
+  var g = ctx.createLinearGradient(0, 0, 0, H);
+  if (dark) { g.addColorStop(0, '#1b1b21'); g.addColorStop(0.55, '#141418'); g.addColorStop(1, '#0d0d10'); }
+  else { g.addColorStop(0, '#2a2a31'); g.addColorStop(0.55, '#1e1e24'); g.addColorStop(1, '#141418'); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  /* ── ground grid on z = 0 ───────────────────────────────────────────── */
+  function proj(x, y, z, o) {
+    var dx = x - eyeX, dy = y - eyeY, dz = z - eyeZ;
+    var vz = dx * fx + dy * fy + dz * fz;
+    if (vz <= NEAR) return false;
+    var inv = S / vz;
+    o[0] = hw + (dx * rx + dy * ry + dz * rz) * inv;
+    o[1] = hh - (dx * ux + dy * uy + dz * uz) * inv;
+    return true;
+  }
+  var pa = [0, 0], pb = [0, 0], i, j;
+  var gx0 = 46 - GRID_N * GRID_S / 2, gy0 = 33 - GRID_N * GRID_S / 2;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(150,158,175,.13)';
+  ctx.beginPath();
+  for (i = 0; i <= GRID_N * 2; i++) {
+    var q = i * GRID_S / 2;
+    if (proj(gx0 + q, gy0, 0, pa) && proj(gx0 + q, gy0 + GRID_N * GRID_S, 0, pb)) {
+      ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]);
+    }
+    if (proj(gx0, gy0 + q, 0, pa) && proj(gx0 + GRID_N * GRID_S, gy0 + q, 0, pb)) {
+      ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]);
+    }
+  }
+  ctx.stroke();
+  /* the 92 x 66 footprint */
+  ctx.strokeStyle = 'rgba(242,183,5,.30)';
+  ctx.beginPath();
+  var fp = [[0, 0], [92, 0], [92, 66], [0, 66], [0, 0]], ok = true, first = true;
+  for (i = 0; i < fp.length; i++) {
+    if (!proj(fp[i][0], fp[i][1], 0, pa)) { ok = false; break; }
+    if (first) { ctx.moveTo(pa[0], pa[1]); first = false; } else ctx.lineTo(pa[0], pa[1]);
+  }
+  if (ok) ctx.stroke();
+
+  /* ── transform + cull + shade ───────────────────────────────────────── */
+  nt = 0;
+  var AMB = 0.235, KD = 0.66, SKY = 0.10, KS = 0.30, SP = 26;
+  for (var ii = 0; ii < INST.length; ii++) {
+    var I = INST[ii], d = I.d;
+    I.vis = !(d.show === 1 && exT < 0.02);
+    if (!I.vis) continue;
+    var Tx = d.t[0], Ty = d.t[1], Tz = d.t[2], th = 0;
+    if (d.pull) Ty -= pull;
+    if (d.spin) th = pull / RP;
+    if (t > 0) { Tx += d.ex[0] * t; Ty += d.ex[1] * t; Tz += d.ex[2] * t; }
+
+    var V = I.P.V, n = I.P.nv, wx = I.wx, wy = I.wy, wz = I.wz,
+        sx = I.sx, sy = I.sy, vzA = I.vz;
+    var bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9, seen = false;
+    var cth = Math.cos(th), sth = Math.sin(th);
+    for (i = 0; i < n; i++) {
+      var x = V[3 * i], y = V[3 * i + 1], z = V[3 * i + 2], X, Y, Z;
+      if (th) { X = cth * x - sth * y + Tx; Y = sth * x + cth * y + Ty; }
+      else { X = x + Tx; Y = y + Ty; }
+      Z = z + Tz;
+      wx[i] = X; wy[i] = Y; wz[i] = Z;
+      var ex_ = X - eyeX, ey_ = Y - eyeY, ez_ = Z - eyeZ;
+      var vz = ex_ * fx + ey_ * fy + ez_ * fz;
+      vzA[i] = vz;
+      if (vz > NEAR) {
+        var inv = S / vz;
+        var px = hw + (ex_ * rx + ey_ * ry + ez_ * rz) * inv;
+        var py = hh - (ex_ * ux + ey_ * uy + ez_ * uz) * inv;
+        sx[i] = px; sy[i] = py;
+        if (px < bx0) bx0 = px; if (px > bx1) bx1 = px;
+        if (py < by0) by0 = py; if (py > by1) by1 = py;
+        seen = true;
+      }
+    }
+    I.seen = seen;
+    I.ax = seen ? (bx0 + bx1) / 2 : 0;
+    I.ay = seen ? (by0 + by1) / 2 : 0;
+
+    var F = I.P.F, nf = I.P.nf;
+    for (j = 0; j < nf; j++) {
+      var a = F[3 * j], b = F[3 * j + 1], c = F[3 * j + 2];
+      var za = vzA[a], zb = vzA[b], zc = vzA[c];
+      if (za <= NEAR || zb <= NEAR || zc <= NEAR) continue;
+      var ax = wx[a], ay = wy[a], azz = wz[a];
+      var e1x = wx[b] - ax, e1y = wy[b] - ay, e1z = wz[b] - azz;
+      var e2x = wx[c] - ax, e2y = wy[c] - ay, e2z = wz[c] - azz;
+      var nx = e1y * e2z - e1z * e2y,
+          ny = e1z * e2x - e1x * e2z,
+          nz = e1x * e2y - e1y * e2x;
+      var vx = ax - eyeX, vy = ay - eyeY, vv = azz - eyeZ;
+      if (nx * vx + ny * vy + nz * vv >= 0) continue;      /* back-facing */
+      var nl = nx * nx + ny * ny + nz * nz;
+      if (nl <= 0) continue;
+      nl = 1 / Math.sqrt(nl); nx *= nl; ny *= nl; nz *= nl;
+      var lam = nx * Lx + ny * Ly + nz * Lz; if (lam < 0) lam = 0;
+      var sh = nx * Hx + ny * Hy + nz * Hz;
+      var spec = sh > 0 ? Math.pow(sh, SP) : 0;
+      var sv = AMB + KD * lam + SKY * (nz * 0.5 + 0.5) + KS * spec;
+      var si = (sv / SMAX * (LEV - 1)) | 0;
+      if (si < 0) si = 0; else if (si > LEV - 1) si = LEV - 1;
+      tI[nt] = ii; tF[nt] = j; tS[nt] = si;
+      tD[nt] = za + zb + zc;
+      ord[nt] = nt; nt++;
+    }
+  }
+
+  /* ── painter's algorithm ────────────────────────────────────────────── */
+  ord.length = nt;
+  ord.sort(function (p, q) { return tD[q] - tD[p]; });
+
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 0.9;
+
+  function pass(ghost) {
+    var cur = null, open = false, k, id, I2, F2, f3, a2, b2, c2, col;
+    for (k = 0; k < nt; k++) {
+      id = ord[k];
+      I2 = INST[tI[id]];
+      if (hi !== null && ((I2.part === hi) === ghost)) continue;
+      col = ghost ? GH[tS[id]] : PAL[I2.mat][tS[id]];
+      if (col !== cur) {
+        if (open) { ctx.fillStyle = cur; ctx.strokeStyle = cur; ctx.fill(); ctx.stroke(); }
+        ctx.beginPath(); open = true; cur = col;
+      }
+      F2 = I2.P.F; f3 = tF[id] * 3;
+      a2 = F2[f3]; b2 = F2[f3 + 1]; c2 = F2[f3 + 2];
+      ctx.moveTo(I2.sx[a2], I2.sy[a2]);
+      ctx.lineTo(I2.sx[b2], I2.sy[b2]);
+      ctx.lineTo(I2.sx[c2], I2.sy[c2]);
+      ctx.closePath();
+    }
+    if (open) { ctx.fillStyle = cur; ctx.strokeStyle = cur; ctx.fill(); ctx.stroke(); }
+  }
+
+  if (hi !== null) { ctx.globalAlpha = 0.16; pass(true); ctx.globalAlpha = 1; pass(false); }
+  else { pass(false); }
+
+  /* ── labels + leader lines ──────────────────────────────────────────── */
+  var la_op = exT < 0.42 ? 0 : Math.min(1, (exT - 0.42) / 0.34);
+  ctx.strokeStyle = 'rgba(255,255,255,.30)';
+  ctx.lineWidth = 1;
+  for (i = 0; i < LABS.length; i++) {
+    var L = LABS[i], I3 = INST[L.i];
+    if (la_op <= 0 || !I3.seen || !I3.vis) {
+      if (L.shown) { L.el.style.opacity = 0; L.shown = false; }
+      continue;
+    }
+    var ax2 = I3.ax, ay2 = I3.ay;
+    var side = ax2 < W * 0.5 ? -1 : 1;
+    var lx = ax2 + side * 62, ly2 = ay2 + L.ly;
+    L.el.style.left = lx + 'px';
+    L.el.style.top = ly2 + 'px';
+    L.el.style.transform = side < 0 ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
+    L.el.style.opacity = la_op;
+    L.shown = true;
+    ctx.globalAlpha = la_op * 0.75;
+    ctx.beginPath();
+    ctx.moveTo(ax2, ay2); ctx.lineTo(lx - side * 4, ly2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ── loop ─────────────────────────────────────────────────────────────── */
+function tick(ts) {
+  requestAnimationFrame(tick);
+  if (document.hidden) return;
+  var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
+  last = ts;
+
+  if (exT !== exTarget) {
+    var step = dt / 0.75;
+    exT += Math.sign(exTarget - exT) * step;
+    if (Math.abs(exTarget - exT) < step) exT = exTarget;
+    dirty = true;
+  }
+  if (playing) {
+    phase = (phase + dt / 6.2) % 1;
+    var p = phase, f;
+    if (p < 0.14) f = 0;
+    else if (p < 0.44) f = ease((p - 0.14) / 0.30);
+    else if (p < 0.60) f = 1;
+    else if (p < 0.90) f = 1 - ease((p - 0.60) / 0.30);
+    else f = 0;
+    setPull(TRAVEL * f, false);
+    dirty = true;
+  }
+  if (dirty) { dirty = false; draw(); }
+}
+
+/* ── controls ─────────────────────────────────────────────────────────── */
+var slider = document.getElementById('v3d-pull');
+var readout = document.getElementById('v3d-pullv');
+function setPull(v, fromUser) {
+  pull = Math.max(0, Math.min(TRAVEL, v));
+  slider.value = pull;
+  readout.textContent = pull.toFixed(2) + ' mm';
+  if (fromUser) dirty = true;
+}
+slider.addEventListener('input', function () {
+  if (playing) togglePlay();
+  setPull(parseFloat(slider.value), true);
+});
+
+var playBtn = document.getElementById('v3d-play');
+function togglePlay() {
+  playing = !playing;
+  playBtn.classList.toggle('on', playing);
+  playBtn.innerHTML = playing ? '▮▮ drive' : '▶ drive';
+  dirty = true;
+}
+playBtn.addEventListener('click', togglePlay);
+
+document.getElementById('v3d-reset').addEventListener('click', function () {
+  az = DEF.az; el = DEF.el; zoom = DEF.zoom; panx = DEF.panx; pany = DEF.pany;
+  dirty = true;
+});
+
+var seg = document.getElementById('v3d-seg');
+seg.addEventListener('click', function (ev) {
+  var b = ev.target.closest ? ev.target.closest('button') : null;
+  if (!b) return;
+  mode = +b.getAttribute('data-m');
+  exTarget = mode;
+  Array.prototype.forEach.call(seg.children, function (c) { c.classList.remove('on'); });
+  b.classList.add('on');
+  dirty = true;
+});
+
+document.getElementById('v3d-bom').addEventListener('mouseover', function (ev) {
+  var r = ev.target.closest ? ev.target.closest('.v3d-row') : null;
+  var v = r ? r.getAttribute('data-part') : null;
+  if (v !== hi) { hi = v; dirty = true; }
+});
+document.getElementById('v3d-bom').addEventListener('mouseleave', function () {
+  if (hi !== null) { hi = null; dirty = true; }
+});
+
+/* orbit / pan / zoom */
+var drag = null, ptrs = {}, pinch = 0;
+cv.addEventListener('pointerdown', function (ev) {
+  cv.setPointerCapture(ev.pointerId);
+  ptrs[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+  if (Object.keys(ptrs).length === 1) {
+    drag = { x: ev.clientX, y: ev.clientY, pan: ev.shiftKey || ev.button === 2 };
+    cv.classList.add('drag');
+  }
+});
+cv.addEventListener('pointermove', function (ev) {
+  if (!ptrs[ev.pointerId]) return;
+  var ks = Object.keys(ptrs);
+  ptrs[ev.pointerId].x = ev.clientX; ptrs[ev.pointerId].y = ev.clientY;
+  if (ks.length >= 2) {
+    var a = ptrs[ks[0]], b = ptrs[ks[1]];
+    var dd = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch) { zoom = Math.max(0.32, Math.min(3.4, zoom * pinch / dd)); dirty = true; }
+    pinch = dd;
+    return;
+  }
+  if (!drag) return;
+  var dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  drag.x = ev.clientX; drag.y = ev.clientY;
+  if (drag.pan) {
+    var k = 0.34 * zoom;
+    panx -= (dx * Math.cos(az) + dy * Math.sin(az) * Math.sin(el)) * k;
+    pany -= (dx * Math.sin(az) - dy * Math.cos(az) * Math.sin(el)) * k;
+  } else {
+    az -= dx * 0.0075;
+    el = Math.max(-1.45, Math.min(1.45, el + dy * 0.0075));
+  }
+  dirty = true;
+});
+function up(ev) {
+  delete ptrs[ev.pointerId];
+  if (!Object.keys(ptrs).length) { drag = null; pinch = 0; cv.classList.remove('drag'); }
+}
+cv.addEventListener('pointerup', up);
+cv.addEventListener('pointercancel', up);
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+cv.addEventListener('wheel', function (ev) {
+  ev.preventDefault();
+  zoom = Math.max(0.32, Math.min(3.4, zoom * Math.exp(ev.deltaY * 0.0012)));
+  dirty = true;
+}, { passive: false });
+
+resize();
+setPull(0, true);
+requestAnimationFrame(tick);
+})();
+</script>
+"""
+
+html = (CSS
+        + BODY.replace("__TRAVEL__", f"{TRAVEL:.2f}")
+              .replace("__ROWS__", ROWS)
+              .replace("__TOTAL__", f"{TOTAL:.0f}")
+              .replace("__SLICED__", f"{TOTAL*0.85:.0f}")
+        + JS.replace("__DATA__", json.dumps(DATA, separators=(",", ":"))))
+
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
+with open(OUT, "w", encoding="utf-8") as fh:
+    fh.write(html)
+
+# ────────────────────────────────────────────────────────────────────────────
+# 5.  Verify
+# ────────────────────────────────────────────────────────────────────────────
+sz = os.path.getsize(OUT)
+txt = open(OUT, encoding="utf-8").read()
+bad = [s for s in ("http://", "https://", "//cdn", "src=", "@import", "fetch(",
+                   "XMLHttpRequest", "importScripts") if s in txt]
+missing = [n for n in NAMES if f'"{n}"' not in txt]
+print(f"\n  wrote {OUT}")
+print(f"  {sz/1024:.1f} KiB ({sz} bytes)")
+print(f"  external references: {bad if bad else 'none'}")
+print(f"  parts missing from the payload: {missing if missing else 'none'}")
+print(f"  triangles: " + ", ".join(f"{n}={tris[n]}" for n in NAMES)
+      + f"   total unique={sum(tris.values())}")
+per_frame = sum(tris[i['p']] for i in INST if i['show'] == 0)
+print(f"  drawn per frame: {per_frame} assembled, "
+      f"{sum(tris[i['p']] for i in INST)} exploded")
+print(f"  build total {TOTAL:.1f} g solid")
+if bad or missing or sz < 40000:
+    sys.exit("VERIFY FAILED")
+print("  OK")

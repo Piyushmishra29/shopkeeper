@@ -27,8 +27,8 @@ OUT  = os.path.join(HERE, "..", "nano")
 os.makedirs(OUT, exist_ok=True)
 
 P = dict(
-    cw=92.0, cd=66.0, ch=60.0, wall=2.0, floor_t=1.4,
-    deck_z=33.0, deck_t=2.5,
+    cw=92.0, cd=66.0, ch=62.0, wall=2.0, floor_t=1.4,
+    deck_z=34.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
     module=1.25, teeth=12, press=math.radians(14.5),
