@@ -19,6 +19,10 @@ SRC   = "/Users/piyushmishra/Downloads/Ryobi_Mini_Desktop_Toolbox.3mf"
 BED   = 256.0
 GAP   = 6.0
 os.makedirs(PLATE, exist_ok=True)
+import glob as _g
+for _f in _g.glob(os.path.join(PLATE, "plate_*.3mf")):
+    os.remove(_f)   # stale plates from an earlier layout must not linger
+
 
 import numpy as np
 
