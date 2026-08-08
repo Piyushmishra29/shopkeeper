@@ -44,6 +44,7 @@ class Servo:
         self.is_open = False
         self.busy = False
         self.cycles = 0            # completed opens, for the maintenance readout
+        Pin(self.pin, Pin.OUT).value(0)   # defined from the very first moment
         self.pos = 0.0             # 0..1 through the stroke, live during a move
         self._detach_task = None
 
@@ -53,12 +54,26 @@ class Servo:
             self._pwm = PWM(Pin(self.pin), freq=config.SERVO_FREQ_HZ)
 
     def detach(self):
+        """Stop driving, but HOLD THE LINE LOW - never leave it floating.
+
+        deinit() alone returns the pin to high-impedance. A servo whose signal
+        wire is floating picks up noise off the neighbouring wire and twitches,
+        which looks exactly like "the other drawer moved too" - and that is a
+        far more convincing bug than it deserves to be, because the servo that
+        was actually commanded really did move at the same moment.
+
+        A steady low is not a valid servo frame, so the servo simply holds
+        station and stays quiet."""
         if self._pwm is not None:
             try:
                 self._pwm.deinit()
             except Exception:
                 pass
             self._pwm = None
+        try:
+            Pin(self.pin, Pin.OUT).value(0)
+        except Exception:
+            pass
 
     def _write_us(self, us):
         lo = min(self.closed_us, self.open_us) - 1

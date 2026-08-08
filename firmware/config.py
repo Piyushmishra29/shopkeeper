@@ -13,7 +13,10 @@ be edited per build. Calibration written from the web UI is persisted to
 # also try an existing network first.
 AP_SSID     = "shopkeeper-NANO"
 AP_PASSWORD = "forge2026"          # >= 8 chars or the ESP refuses to start the AP
-JOIN        = None                 # e.g. ("Airtel_shya_1120", "....")
+# Joining the house network first means the cabinet is reachable from a laptop
+# that is also on the internet. Falls back to its own AP if the join fails, so
+# the meeting-room case still works.
+JOIN        = ("Pi2.4", "81481187")
 JOIN_TIMEOUT_S = 12
 
 # ── servos ─────────────────────────────────────────────────────────────────
