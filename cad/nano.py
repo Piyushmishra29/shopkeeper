@@ -64,7 +64,10 @@ P = dict(
     # The output spline itself: 20 teeth, ~4.8 mm across, ~3.8 mm of it proud
     # of the body top. hub="spline" bores the pinion straight onto it and drops
     # the horn entirely; hub="horn" keeps the old keyed arm slot.
-    sg_spl_d=4.8, sg_spl_h=3.8,
+    # 5.0 measured on the actual servo, not the 4.8 nominal I had assumed.
+    # A 4.65 bore against a 5.0 spline is 0.35 undersize - that does not press
+    # on, it splits the boss.
+    sg_spl_d=5.0, sg_spl_h=3.8,
     hub="spline",
     # THE OUTPUT SHAFT IS NOT IN THE MIDDLE OF THE BODY. It sits ~5.9 mm from
     # one end, which is plain to see on the part and was modelled nowhere: the
@@ -719,14 +722,16 @@ def spline_gauge():
     find the one that needs firm thumb pressure and then holds, and that
     number goes into sg_spl_d.
 
-    Bores are 4.50 to 4.90 in 0.10 steps, marked with 1..5 notches so they can
-    be told apart by feel as well as by eye."""
-    n, pitch, t = 5, 11.0, P["sg_spl_h"] + 1.6
+    Bores are 4.60 to 5.10 in 0.10 steps, marked with 1..6 notches so they can
+    be told apart by feel as well as by eye. The range brackets the 5.0 mm
+    measured on the real servo: the fit that works is usually 0.10-0.20 under
+    the spline, so expect 4.80 or 4.90."""
+    n, pitch, t = 6, 11.0, P["sg_spl_h"] + 1.6
     W = n*pitch + 5.0
     m = blk(0, W, 0, 13.0, 0, t)
     for i in range(n):
         cx = 5.0 + i*pitch - 2.5 + pitch/2
-        d = 4.50 + i*0.10
+        d = 4.60 + i*0.10
         m = diff(m, cyl_z(d, -1, t+1, cx, 6.5))
         # i+1 notches along the front edge: countable with a fingernail
         for k in range(i+1):
