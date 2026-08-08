@@ -22,6 +22,27 @@
   }, { rootMargin: "-45% 0px -45% 0px" });
   entries.forEach(function (e) { band.observe(e); });
 
+  /* 1b. page dots on mobile — the desktop entry readout is off-screen there,
+        and a deck with no position indicator feels endless */
+  if (matchMedia("(max-width: 760px)").matches) {
+    var pager = document.createElement("div");
+    pager.className = "pager";
+    var dots = entries.map(function () {
+      var i = document.createElement("i");
+      pager.appendChild(i);
+      return i;
+    });
+    document.body.appendChild(pager);
+    var pageObs = new IntersectionObserver(function (rows) {
+      rows.forEach(function (r) {
+        if (!r.isIntersecting) return;
+        var i = entries.indexOf(r.target);
+        dots.forEach(function (d, k) { d.className = k === i ? "on" : ""; });
+      });
+    }, { rootMargin: "-45% 0px -45% 0px" });
+    entries.forEach(function (e) { pageObs.observe(e); });
+  }
+
   /* 2. the viewer mounts AFTER first paint, never before — the fold is type
         and a static SVG, so the canvas can never be the thing keeping the
         page from painting. 600px of rootMargin means it is already true at

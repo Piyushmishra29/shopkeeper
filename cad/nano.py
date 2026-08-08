@@ -70,6 +70,14 @@ P = dict(
     # A 4.65 bore against a 5.0 spline is 0.35 undersize - that does not press
     # on, it splits the boss.
     sg_spl_d=5.0, sg_spl_h=4.0,
+    # MEASURED, not derived. Three test pinions were printed at modelled bores
+    # of 5.15 / 5.25 / 5.35 and pressed onto the real spline; 5.15 is the one
+    # that grips. So the bore is modelled 0.15 OVER the spline, not under it -
+    # the hole loses about 0.30 mm in the print, and sizing it 0.15 under (the
+    # textbook press allowance) produced a part that would not go on at all.
+    # This is printer-specific. Re-run nano/plates/plate_0_bore_test.3mf on a
+    # different machine before trusting it.
+    spl_press=0.15,
     hub="spline",
     # THE OUTPUT SHAFT IS NOT IN THE MIDDLE OF THE BODY. It sits ~5.9 mm from
     # one end, which is plain to see on the part and was modelled nowhere: the
@@ -251,7 +259,7 @@ def pinion():
         boss_bot = P["sg_h"] - P["sg_base"] + 0.3          # clear of the body top
         boss_h = SG_HORN - (SG_BASE + P["sg_h"]) - 0.3      # 3.5 mm of engagement
         m = union([m, cyl_z(9.0, -boss_h, 0, 0, 0)])
-        m = diff(m, cyl_z(P["sg_spl_d"] - 0.15, -boss_h - 0.1,
+        m = diff(m, cyl_z(P["sg_spl_d"] + P["spl_press"], -boss_h - 0.1,
                           P["sg_spl_h"] - boss_h + 0.4, 0, 0))
         # M2.5 down the middle, head recessed into the top face so it can be
         # reached and so nothing stands proud into the deck
