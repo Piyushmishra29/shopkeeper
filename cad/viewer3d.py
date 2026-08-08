@@ -43,13 +43,16 @@ def _slice(first_prefix, last_prefix):
     b = next(i for i, l in enumerate(_src) if i > a and l.startswith(last_prefix))
     return "\n".join(_src[a:b + 1])
 
+# ANTITIP..PEG_X now spans the rib constants, the rack flange constants and the
+# post-band helpers, so take the whole run rather than three separate slices.
 _blk = (_slice("P = dict(", "PIN_Y ") + "\n"
-        + _slice("RACK_L ", "PEG_D "))
+        + _slice("ANTITIP ", "PEG_X "))
 _ns = {"math": math}
 exec(compile(_blk, NANO, "exec"), _ns)
 for _k in ("P", "M", "N", "R_P", "R_TIP", "R_ROOT", "PITCH", "TRAVEL", "TOOTH_H",
            "FIN_SPAN", "CW", "CD", "CH", "WL", "DECK", "DR_D", "DR_TOP", "INNER",
-           "DR_W", "DR_X", "FIN_X", "PIN_DX", "PIN_Y", "RACK_L", "RACK_Y0", "PEG_D"):
+           "DR_W", "DR_X", "FIN_X", "PIN_DX", "PIN_Y", "RACK_L", "RACK_Y0", "PEG_D",
+           "ANTITIP", "RK_X0", "RK_X1", "PEG_X", "CDIST"):
     assert _k in _ns, f"nano.py no longer defines {_k}"
     globals()[_k] = _ns[_k]
 
@@ -59,19 +62,28 @@ print(f"  from nano.py:  case {CW:.0f} x {CD:.0f} x {CH:.0f}   deck top {DECK:.1
 
 # rack.stl was exported from rack(assembly=False) — print pose. These are the
 # analytic bounds of rack(assembly=True), the pose used in the sweep.
-RACK_ASM_MIN = np.array([-6.0, -3.0, -(P["fin_h"] + P["dr_floor"])])   # (-6,-3,-9.8)
+# The flange moved inboard (it used to run through the drawer's own walls)
+# and the blade grew, so this is (-4, 0, -13) now, not (-6, -3, -9.8).
+RACK_ASM_MIN = np.array([RK_X0, 0.0, -(P["fin_h"] + P["dr_floor"])])
 
-# nano.py never places the pinion (it is not part of the interference sweep),
-# so its Z is derived here: sit the 5 mm gear body against the toothed blade
-# and land the 5 mm hub flush under the drawer floor.
-PIN_Z = DECK + 0.2 - (P["gear_t"] + 5.0)          # 25.7
+# The pinion's Z is no longer free-floating: it sits on the servo horn, and
+# the servo's height is set by the shim. Same number nano.py checks.
+SG_BASE = P["sg_base"]
+SG_HORN = SG_BASE + P["sg_horn"]                  # horn face = pinion underside
+PIN_Z   = SG_HORN                                 # 32.5
 
 # ────────────────────────────────────────────────────────────────────────────
 # 2.  Load, sanity-check, decimate
 # ────────────────────────────────────────────────────────────────────────────
-NAMES = ["case_lower", "case_upper", "deck", "drawer", "rack", "pinion", "knob"]
+NAMES = ["case_lower", "case_upper", "deck", "drawer", "rack", "pinion",
+         "servo_shim", "knob"]
+# Bought parts. Drawn so the render shows the machine, not just the plastic -
+# but kept out of the BOM totals, because you do not print an SG90.
+EXTRA = ["servo", "esp"]
 # keep = leave the mesh alone; the STLs are already low-poly.
-TARGET = {"case_lower": 1400}
+# case_lower is the part you look at most and the one carrying the honeycomb
+# floor, so it gets a higher budget now that the rig makes detail legible.
+TARGET = {"case_lower": 2600}
 
 raw = {}
 for n in NAMES:
@@ -85,7 +97,8 @@ def close(a, b, tol=1e-6):
 
 # assert the derived assembly numbers against the real exported geometry
 e = raw["drawer"].extents
-assert np.allclose(e, [DR_W, DR_D, P["dr_h"]], atol=1e-6), f"drawer {e} != {DR_W,DR_D,P['dr_h']}"
+# dr_h + ANTITIP: the rear wall stands 3 mm proud as the anti-tip catch
+assert np.allclose(e, [DR_W, DR_D, P["dr_h"]+ANTITIP], atol=1e-6), f"drawer {e}"
 e = raw["deck"].extents
 assert np.allclose(e, [CW-2*WL-0.6, CD-2*WL-0.6, P["deck_t"]], atol=1e-6), f"deck {e}"
 e = raw["case_lower"].extents
@@ -93,11 +106,11 @@ pass  # case_lower height varies with the alignment pins
 e = raw["case_upper"].extents
 assert np.allclose(e, [CW, CD, CH-DECK], atol=1e-6), f"case_upper {e}"
 e = raw["rack"].extents
-assert np.allclose(e, [14.0, RACK_L+6.0, P["fin_h"]+P["dr_floor"]+2.0], atol=1e-6), f"rack {e}"
+assert np.allclose(e, [RK_X1-RK_X0, RACK_L, P["fin_h"]+P["dr_floor"]+2.0],
+                   atol=1e-6), f"rack {e}"
 
-# nano.py:  y_closed = 7.8
-Y_CLOSED = 7.8   # explicit now: case depth no longer derives it
-assert close(Y_CLOSED, 7.8), Y_CLOSED
+# nano.py: Y_CLOSED = 0.0 — the drawer face is FLUSH with the case face now
+Y_CLOSED = 0.0
 
 def decimate(m, target, tol=0.03):
     """Decimate, but only accept a result that still encloses the same volume.
@@ -136,7 +149,7 @@ def quantise(m):
     assert vol > 0, "quantised mesh has inverted winding"
     return uniq, F, vol
 
-geo, tris, grams = {}, {}, {}
+geo, tris, grams, posed_raw = {}, {}, {}, {}
 for n in NAMES:
     m = raw[n]
     grams[n] = m.volume / 1000.0 * DENSITY
@@ -151,13 +164,82 @@ for n in NAMES:
         m.apply_transform(trimesh.transformations.rotation_matrix(math.pi, [1, 0, 0]))
         m.apply_translation(-m.bounds[0] + RACK_ASM_MIN)
         assert np.allclose(m.bounds[0], RACK_ASM_MIN, atol=1e-6), m.bounds
-        assert np.allclose(m.bounds[1], [8.0, RACK_L + 3.0, 2.0], atol=1e-6), m.bounds
+        assert np.allclose(m.bounds[1], [RK_X1, RACK_L, 2.0], atol=1e-6), m.bounds
+    posed_raw[n] = m                      # full-precision, in assembly pose
     s, nf, did = decimate(m, TARGET.get(n))
     V, F, vol = quantise(s)
     geo[n] = {"v": V.reshape(-1).tolist(), "f": F.reshape(-1).tolist()}
     tris[n] = int(len(F))
     print(f"  {n:11s} {len(m.faces):5d} -> {tris[n]:5d} tri   {len(V):5d} vtx   "
           f"{grams[n]:5.2f} g   {'decimated' if did else 'as printed'}")
+
+# ────────────────────────────────────────────────────────────────────────────
+# 2b. The bought parts: one SG90 and the ESP32 on its breadboard.
+#
+# These are the only things in the picture that are not printed, and leaving
+# them out made the render look like a box of plastic rather than a machine.
+# Every dimension is the one the case was built around, so if the render shows
+# them fitting, they fit - and if it shows them clashing, that is a real clash.
+# ────────────────────────────────────────────────────────────────────────────
+def _box(x0, x1, y0, y1, z0, z1):
+    b = trimesh.creation.box(extents=[x1-x0, y1-y0, z1-z0])
+    b.apply_translation([(x0+x1)/2, (y0+y1)/2, (z0+z1)/2])
+    return b
+
+def _cyl(d, z0, z1, x=0.0, y=0.0, n=20):
+    c = trimesh.creation.cylinder(radius=d/2, height=z1-z0, sections=n)
+    c.apply_translation([x, y, (z0+z1)/2])
+    return c
+
+def build_servo():
+    """SG90, modelled about its OUTPUT SHAFT at the origin, sitting on the shim.
+
+    x is measured from the shaft because that is what the case locates: the
+    shaft is the pinion axis. The body hangs 5.9 mm one side and 16.9 the
+    other, which is why the cradle is not symmetric."""
+    sl, sw, sh = P["sg_l"], P["sg_w"], P["sg_h"]
+    # the output shaft sits 5.9 mm in from one end of the body
+    x0, x1 = -5.9, -5.9 + sl
+    parts = [_box(x0, x1, -sw/2, sw/2, SG_BASE, SG_BASE + sh)]          # body
+    parts.append(_box(-P["sg_tab"]/2, P["sg_tab"]/2, -sw/2, sw/2,       # ears
+                      SG_BASE + P["sg_ear"], SG_BASE + P["sg_ear"] + 2.5))
+    parts.append(_cyl(11.5, SG_BASE + sh, SG_BASE + sh + 3.0))          # gear boss
+    parts.append(_cyl(4.8, SG_BASE + sh + 3.0, SG_HORN))                # spline
+    return trimesh.util.concatenate(parts)
+
+def build_esp():
+    """ESP32-S3 DevKit plugged into a half breadboard, as measured: 81.5 long,
+    35.5 across, 27.0 tall to the top of a plugged dupont lead."""
+    EBL, EBW = 81.5, 35.5
+    bb_h = 8.5                                    # breadboard body
+    z0 = P["floor_t"]
+    parts = [_box(-EBL/2, EBL/2, -EBW/2, EBW/2, z0, z0 + bb_h)]
+    # the DevKit straddles the centre channel
+    parts.append(_box(-EBL/2 + 9, -EBL/2 + 9 + 63.0, -12.7, 12.7,
+                      z0 + bb_h, z0 + bb_h + 1.6))
+    # the RF can, the one part with a recognisable silhouette
+    parts.append(_box(-EBL/2 + 12, -EBL/2 + 12 + 18.0, -8.0, 8.0,
+                      z0 + bb_h + 1.6, z0 + bb_h + 4.0))
+    # plugged leads: this is what makes the stack 27 mm, not the board
+    for lx in (-EBL/2 + 14, -EBL/2 + 30, -EBL/2 + 46, -EBL/2 + 62):
+        for ly in (-15.5, 15.5):
+            parts.append(_box(lx-1.2, lx+1.2, ly-1.2, ly+1.2,
+                              z0 + bb_h, z0 + P["esp_h"]))
+    return trimesh.util.concatenate(parts)
+
+extra_raw = {"servo": build_servo(), "esp": build_esp()}
+for n in EXTRA:
+    m = extra_raw[n]
+    grams[n] = 0.0                                # bought, not printed
+    V, F, vol = quantise(m)
+    geo[n] = {"v": V.reshape(-1).tolist(), "f": F.reshape(-1).tolist()}
+    tris[n] = int(len(F))
+    print(f"  {n:11s} {len(m.faces):5d} -> {tris[n]:5d} tri   {len(V):5d} vtx"
+          f"          bought part")
+
+# the ESP stack must not foul the rack blades - the render would show it, but
+# say so numerically too
+assert P["floor_t"] + P["esp_h"] < DECK + 0.2 - P["fin_h"], "ESP fouls the blades"
 
 # ────────────────────────────────────────────────────────────────────────────
 # 3.  Assembly + exploded transforms
@@ -200,6 +282,14 @@ for i, dx in enumerate(DR_X):
     add("pinion", (dx + FIN_X + PIN_DX, WL + PIN_Y,     PIN_Z),
         (side*18, -62, 22), spin=1, ph=PIN_PHASE,
         lab=("pinion" if i == 0 else None), ly=26)
+    # the servo, directly under its own pinion, and the shim it stands on
+    add("servo", (dx + FIN_X + PIN_DX, WL + PIN_Y, 0),
+        (side*18, -62, -18), lab=("SG90" if i == 0 else None), ly=14)
+    add("servo_shim", (dx + FIN_X + PIN_DX - (P["sg_l"]+2*P["clear"]-0.6)/2,
+                       WL + PIN_Y - (P["sg_w"]+2*P["clear"]-0.6)/2, P["floor_t"]),
+        (side*18, -62, -40), lab=("shim" if i == 0 else None), ly=0)
+
+add("esp", (CW/2, CD - 23.0, 0), (0, 66, -30), lab="ESP32-S3", ly=0)
 
 # the knob is only ever shown exploded (P["pull"] == "cut" means it is not
 # fitted), so it gets its own clear spot well in front of everything
@@ -235,11 +325,14 @@ print(f"\n  fit assembled  c={fitA_c} r={fitA_r}")
 print(f"  fit exploded   c={fitE_c} r={fitE_r}")
 
 MAT = {"case_lower": "shellB", "case_upper": "shellA", "deck": "gold",
-       "drawer": "gold", "rack": "gold", "pinion": "gold", "knob": "gold"}
-COL = {"shellA": "#EDEDF2", "shellB": "#D8D8DF", "gold": "#F2B705"}
+       "drawer": "gold", "rack": "gold", "pinion": "gold", "knob": "gold",
+       "servo_shim": "gold", "servo": "blue", "esp": "board"}
+COL = {"shellA": "#EDEDF2", "shellB": "#D8D8DF", "gold": "#F2B705",
+       "blue": "#2F6FE4", "board": "#1F7A4D"}
 
 QTY  = {"case_lower": 1, "case_upper": 1, "deck": 1,
-        "drawer": 2, "rack": 2, "pinion": 2, "knob": 2}
+        "drawer": 2, "rack": 2, "pinion": 2, "servo_shim": 2, "knob": 2,
+        "servo": 2, "esp": 1}
 BLURB = {
  "case_lower": "mech bay, open top &mdash; servos, pinions, ESP32",
  "case_upper": "drawer bay + top face, printed upside down",
@@ -247,37 +340,42 @@ BLURB = {
  "drawer":     "42 &times; 55 &times; 18 bin, scalloped finger pull",
  "rack":       "toothed blade, pegs through the drawer floor",
  "pinion":     "m1.25 &times; 12T, bolts to the SG90 horn",
+ "servo_shim": "sets the servo height &mdash; reprint this, not the case",
  "knob":       "optional press-fit pull &mdash; unused with the scalloped cut",
+ "servo":      "SG90, bought &mdash; drives one drawer through its pinion",
+ "esp":        "ESP32-S3 on a half breadboard, bought &mdash; no soldering",
 }
 
-TOTAL = sum(grams[n]*QTY[n] for n in NAMES if n != "knob")
+TOTAL = sum(grams[n]*QTY[n] for n in NAMES if n != "knob")   # printed only
 
 DATA = {
     "parts": geo,
     "inst":  INST,
-    "mat":   {n: MAT[n] for n in NAMES},
+    "mat":   {n: MAT[n] for n in NAMES + EXTRA},
     "col":   COL,
     "travel": round(TRAVEL, 4),
     "rp":    R_P,
     "cw":    CW, "cd": CD, "ch": CH,
     "fitA":  {"c": fitA_c, "r": fitA_r},
     "fitE":  {"c": fitE_c, "r": fitE_r},
-    "bom":   {n: {"q": QTY[n], "g": round(grams[n], 2), "t": tris[n]} for n in NAMES},
+    "bom":   {n: {"q": QTY[n], "g": round(grams[n], 2), "t": tris[n]}
+              for n in NAMES + EXTRA},
 }
 
 # ────────────────────────────────────────────────────────────────────────────
 # 4.  Emit
 # ────────────────────────────────────────────────────────────────────────────
 rows = []
-for n in NAMES:
+for n in NAMES + EXTRA:
     rows.append(
         '<li class="v3d-row" data-part="{n}">'
         '<span class="v3d-sw" style="background:{c}"></span>'
         '<span class="v3d-nm">{n}<em>&times;{q}</em></span>'
-        '<span class="v3d-gm">{g:.1f} g</span>'
+        '<span class="v3d-gm">{gm}</span>'
         '<span class="v3d-bl">{b}</span>'
         '<span class="v3d-tr">{t} tri</span>'
-        '</li>'.format(n=n, c=COL[MAT[n]], q=QTY[n], g=grams[n],
+        '</li>'.format(n=n, c=COL[MAT[n]], q=QTY[n],
+                       gm=("bought" if n in EXTRA else f"{grams[n]:.1f} g"),
                        b=BLURB[n], t=tris[n]))
 ROWS = "\n      ".join(rows)
 
@@ -461,6 +559,16 @@ function mkpal(hex) {
 }
 var PAL = {}, GH = mkpal('#7d7d88');
 Object.keys(D.col).forEach(function (k) { PAL[k] = mkpal(D.col[k]); });
+/* Finish per material. Printed PLA is semi-matte with a broad sheen from the
+   layer lines; an SG90's case is glossy ABS; a PCB is matte solder mask. Giving
+   all three the same specular was most of why everything read as one material. */
+var FIN = {
+  shellA: { ks: 0.26, sp: 22 }, shellB: { ks: 0.26, sp: 22 },
+  gold:   { ks: 0.30, sp: 26 },
+  blue:   { ks: 0.52, sp: 54 },
+  board:  { ks: 0.07, sp: 11 }
+};
+function finOf(m) { return FIN[m] || FIN.gold; }
 
 /* ── triangle buffers ─────────────────────────────────────────────────── */
 var tI = new Int32Array(MAXT), tF = new Int32Array(MAXT),
@@ -511,8 +619,19 @@ window.addEventListener('resize', resize);
 
 /* ── theme ────────────────────────────────────────────────────────────── */
 var darkQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-function isDark() { return darkQ ? darkQ.matches : true; }
+/* data-theme wins over the OS preference in BOTH directions: the host page
+   stamps it on <html> when the viewer's own theme toggle is used, and a canvas
+   that only watched prefers-color-scheme would keep rendering the other
+   theme's background behind a correctly themed page. */
+function isDark() {
+  var a = document.documentElement.getAttribute('data-theme');
+  if (a === 'dark') return true;
+  if (a === 'light') return false;
+  return darkQ ? darkQ.matches : true;
+}
 if (darkQ && darkQ.addEventListener) darkQ.addEventListener('change', function () { dirty = true; });
+if (window.MutationObserver) new MutationObserver(function () { dirty = true; })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 /* ── math helpers ─────────────────────────────────────────────────────── */
 function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -544,11 +663,22 @@ function draw() {
 
   var S = (H / 2) / Math.tan(FOV / 2), hw = W / 2, hh = H / 2, NEAR = 0.5;
 
-  /* key light orbits with the camera so nothing is ever a black silhouette */
+  /* ── three-point rig, all of it orbiting with the camera ──────────────
+     One key light and a weak sky term was the whole rig, which is why every
+     surface facing away from it went flat and dead. Key models the form, fill
+     opens the shadow side without flattening it, and a rim behind the subject
+     separates the silhouette from a dark background - which matters more here
+     than usual, because the parts are light plastic on a near-black ground. */
   var la = az - 0.85, lc = Math.cos(0.62), ls = Math.sin(0.62);
   var Lx = lc * Math.sin(la), Ly = -lc * Math.cos(la), Lz = ls;
   var Hx = Lx - fx, Hy = Ly - fy, Hz = Lz - fz;
   var hl = 1 / Math.sqrt(Hx * Hx + Hy * Hy + Hz * Hz); Hx *= hl; Hy *= hl; Hz *= hl;
+  /* fill: opposite side, lower, no specular of its own */
+  var fa = az + 1.95, fc = Math.cos(0.22), fs2 = Math.sin(0.22);
+  var Fx = fc * Math.sin(fa), Fy = -fc * Math.cos(fa), Fz = fs2;
+  /* rim: behind the subject, high, reads only at grazing angles */
+  var ra = az + Math.PI - 0.35, rc = Math.cos(0.95), rs2 = Math.sin(0.95);
+  var Rx = rc * Math.sin(ra), Ry = -rc * Math.cos(ra), Rz = rs2;
 
   /* background */
   var dark = isDark();
@@ -592,9 +722,42 @@ function draw() {
   }
   if (ok) ctx.stroke();
 
+  /* ── contact shadow ─────────────────────────────────────────────────────
+     Without it the assembly hangs in space above its own grid. It is a plain
+     screen-space ellipse rather than a projected one: at these camera angles
+     the difference is invisible, and a real shadow pass would cost a second
+     sort over every triangle. */
+  (function () {
+    var cpt = [[0, 0], [FCW, 0], [FCW, FCD], [0, FCD]];
+    var mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9, q2;
+    for (q2 = 0; q2 < 4; q2++) {
+      if (!proj(cpt[q2][0], cpt[q2][1], 0, pa)) return;
+      if (pa[0] < mnx) mnx = pa[0];  if (pa[0] > mxx) mxx = pa[0];
+      if (pa[1] < mny) mny = pa[1];  if (pa[1] > mxy) mxy = pa[1];
+    }
+    var rw = (mxx - mnx) / 2 * 1.10, rh = (mxy - mny) / 2 * 1.30;
+    if (!(rw > 0.5 && rh > 0.5)) return;
+    ctx.save();
+    ctx.globalAlpha = 1 - t * 0.55;          /* fades as the view explodes */
+    ctx.translate((mnx + mxx) / 2, (mny + mxy) / 2);
+    ctx.scale(1, rh / rw);
+    var sg = ctx.createRadialGradient(0, 0, rw * 0.10, 0, 0, rw);
+    sg.addColorStop(0.00, 'rgba(0,0,0,.50)');
+    sg.addColorStop(0.48, 'rgba(0,0,0,.26)');
+    sg.addColorStop(1.00, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(0, 0, rw, 0, 6.2831853); ctx.fill();
+    ctx.restore();
+  })();
+
   /* ── transform + cull + shade ───────────────────────────────────────── */
   nt = 0;
-  var AMB = 0.235, KD = 0.66, SKY = 0.10, KS = 0.30, SP = 26;
+  var AMB = 0.20, KD = 0.60, SKY = 0.11, FILL = 0.17, RIM = 0.30;
+  /* Cheap ambient occlusion: everything below the deck is inside a closed box
+     and should not be lit like the outside of one. A straight height ramp is
+     crude, but it is the difference between a mech bay that reads as a cavity
+     and one that reads as a lid photographed from underneath. */
+  var AO_Z0 = 0.0, AO_Z1 = D.ch * 0.42, AO_MIN = 0.62;
   for (var ii = 0; ii < INST.length; ii++) {
     var I = INST[ii], d = I.d;
     I.vis = !(d.show === 1 && exT < 0.02);
@@ -606,6 +769,7 @@ function draw() {
 
     var V = I.P.V, n = I.P.nv, wx = I.wx, wy = I.wy, wz = I.wz,
         sx = I.sx, sy = I.sy, vzA = I.vz;
+    var _f = finOf(I.mat), fKS = _f.ks, fSP = _f.sp;
     var bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9, seen = false;
     var cth = Math.cos(th), sth = Math.sin(th);
     for (i = 0; i < n; i++) {
@@ -648,9 +812,19 @@ function draw() {
       if (nl <= 0) continue;
       nl = 1 / Math.sqrt(nl); nx *= nl; ny *= nl; nz *= nl;
       var lam = nx * Lx + ny * Ly + nz * Lz; if (lam < 0) lam = 0;
+      var lfi = nx * Fx + ny * Fy + nz * Fz; if (lfi < 0) lfi = 0;
       var sh = nx * Hx + ny * Hy + nz * Hz;
-      var spec = sh > 0 ? Math.pow(sh, SP) : 0;
-      var sv = AMB + KD * lam + SKY * (nz * 0.5 + 0.5) + KS * spec;
+      var spec = sh > 0 ? Math.pow(sh, fSP) : 0;
+      /* fresnel: 1 at grazing, 0 head-on. Gates the rim so it lands on edges
+         rather than washing over broad faces. */
+      var vlen = 1 / Math.sqrt(vx * vx + vy * vy + vv * vv);
+      var ndv = -(nx * vx + ny * vy + nz * vv) * vlen; if (ndv < 0) ndv = 0;
+      var fres = 1 - ndv; fres *= fres * fres;
+      var rimd = nx * Rx + ny * Ry + nz * Rz; if (rimd < 0) rimd = 0;
+      var ao = (azz - AO_Z0) / (AO_Z1 - AO_Z0); if (ao > 1) ao = 1; if (ao < 0) ao = 0;
+      ao = AO_MIN + (1 - AO_MIN) * ao;
+      var sv = (AMB + KD * lam + FILL * lfi + SKY * (nz * 0.5 + 0.5)) * ao
+             + fKS * spec + RIM * fres * rimd;
       var si = (sv / SMAX * (LEV - 1)) | 0;
       if (si < 0) si = 0; else if (si > LEV - 1) si = LEV - 1;
       tI[nt] = ii; tF[nt] = j; tS[nt] = si;
@@ -858,14 +1032,49 @@ os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", encoding="utf-8") as fh:
     fh.write(html)
 
+# The above is a FRAGMENT (one <style>, one <div>, one <script>) because that is
+# what the brainstorm page and the artifact host both want - they supply the
+# document shell. Serving it on localhost needs a real document, so wrap the
+# same bytes rather than generating a second, drifting copy.
+STANDALONE = os.path.normpath(os.path.join(HERE, "..", "nano", "viewer", "index.html"))
+os.makedirs(os.path.dirname(STANDALONE), exist_ok=True)
+PAGE = ("""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>shopkeeper NANO &mdash; assembly</title>
+<style>
+  :root { --bg-primary:#fbfbfd; --bg-secondary:#fff; --text-primary:#1d1d1f;
+          --text-secondary:#86868b; --text-tertiary:#aeaeb2; --accent:#0071e3;
+          --gold:#F2B705; --hair:rgba(0,0,0,.10); }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg-primary:#0b0b0f; --bg-secondary:#15151b; --text-primary:#f4f4f6;
+            --text-secondary:#a0a0aa; --text-tertiary:#6e6e78;
+            --hair:rgba(255,255,255,.12); }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; background:var(--bg-primary);
+         color:var(--text-primary); font:15px/1.5 -apple-system,BlinkMacSystemFont,
+         'SF Pro Text',Inter,system-ui,sans-serif; }
+  main { max-width:1180px; margin:0 auto; }
+</style></head><body><main>
+""" + html + """
+</main></body></html>""")
+with open(STANDALONE, "w", encoding="utf-8") as fh:
+    fh.write(PAGE)
+print(f"  standalone {STANDALONE}  ({len(PAGE)/1024:.0f} KiB)")
+
 # ────────────────────────────────────────────────────────────────────────────
 # 5.  Verify
 # ────────────────────────────────────────────────────────────────────────────
 def remesh(name):
-    g = geo[name]
-    return trimesh.Trimesh(np.array(g["v"], dtype=np.float64).reshape(-1, 3) / 100.0,
-                           np.array(g["f"], dtype=np.int64).reshape(-1, 3),
-                           process=False)
+    """FULL-PRECISION mesh in assembly pose, not the display copy.
+
+    The display copy is quantised to 0.01 mm, and the involute pinion has flank
+    points closer together than that - so quantising welds them, drops the
+    degenerate faces and leaves a shell that is no longer a volume. Booleans
+    refuse it, and rightly. The phase and Z being checked here are properties
+    of the real geometry, so check them against the real geometry."""
+    return posed_raw[name].copy()
 
 def posed(inst, pull):
     m = remesh(inst["p"])
@@ -897,12 +1106,12 @@ sz = os.path.getsize(OUT)
 txt = open(OUT, encoding="utf-8").read()
 bad = [s for s in ("http://", "https://", "//cdn", "src=", "@import", "fetch(",
                    "XMLHttpRequest", "importScripts") if s in txt]
-missing = [n for n in NAMES if f'"{n}"' not in txt]
+missing = [n for n in NAMES + EXTRA if f'"{n}"' not in txt]
 print(f"\n  wrote {OUT}")
 print(f"  {sz/1024:.1f} KiB ({sz} bytes)")
 print(f"  external references: {bad if bad else 'none'}")
 print(f"  parts missing from the payload: {missing if missing else 'none'}")
-print(f"  triangles: " + ", ".join(f"{n}={tris[n]}" for n in NAMES)
+print(f"  triangles: " + ", ".join(f"{n}={tris[n]}" for n in NAMES + EXTRA)
       + f"   total unique={sum(tris.values())}")
 per_frame = sum(tris[i['p']] for i in INST if i['show'] == 0)
 print(f"  drawn per frame: {per_frame} assembled, "
