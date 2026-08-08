@@ -239,22 +239,27 @@ def case_lower():
         m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
                      -1,WL+1,DECK-P["fin_h"]-1.5,DECK+1))
         px=dx+FIN_X+PIN_DX
-        # ── servo cradle: a PEDESTAL, not a well ──
-        # The servo's height was never modelled. It bottomed out on 0.38 mm of
-        # remaining floor (the pocket cut 1.0 mm into a 1.4 mm floor), the
-        # screw holes stopped 1.65 mm short of the flange so it could not be
-        # bolted, and the pinion's Z therefore depended on which of those it
-        # happened to rest on. Now the body bottoms on a solid pedestal at
-        # sg_base and that single surface fixes the horn height, hence the
-        # pinion height. Screws are location, not support.
-        CRT = SG_BASE + P["sg_ear"]              # cradle wall top = flange underside
+        # ── servo cradle: an OPEN WELL. The height comes from a SHIM. ──
+        # The servo's height sets the horn height, which sets the pinion
+        # height, which decides whether the gears engage at all. That number
+        # came from an SG90 datasheet, not from a servo on a bench - and it was
+        # moulded into a 95 g case that takes four hours to print. So it is a
+        # separate 2 g part now. If your servo measures differently, reprint
+        # the shim; the case does not care.
+        CRT = SG_BASE + P["sg_ear"] - 1.9       # walls stop BELOW the lowest ear
         m=union([m,blk(px-P["sg_tab"]/2-2.0,px+P["sg_tab"]/2+2.0,
                        WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
                        WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,P["floor_t"],CRT)])
-        # body pocket bottoms ON the pedestal - it no longer eats the floor
+        # Well goes down to the FLOOR. The shim, not the case, sets the height,
+        # and the walls end low enough that the ears can never land on them
+        # first and override it.
         m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
                      WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
-                     SG_BASE,CRT+1))
+                     P["floor_t"],CRT+1))
+        # cable notch: an SG90's lead leaves the side of the body low down, and
+        # a closed 1.6 mm wall all the way round traps it
+        m=diff(m,blk(px-11.0,px-5.0,WL+PIN_Y-9.0,WL+PIN_Y-5.0,
+                     P["floor_t"],SG_BASE+9.0))
         # Pilot holes as vertical SLOTS. Clone SG90s vary about 1 mm in where
         # the flange sits, and a round hole that misses is worse than useless.
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
@@ -535,6 +540,28 @@ def logo_inlay():
     m.apply_translation(-m.bounds[0])
     return m
 
+def servo_shim():
+    """Sets the servo's height, and therefore the pinion's.
+
+    This is the only part in the design whose thickness comes from a number
+    nobody has measured on the actual hardware. Making it a separate 2 g part
+    means that number can be wrong without costing a 95 g case: measure your
+    SG90 from the base of its body to the flat face the horn screws onto, and
+    if it is not sg_horn, change sg_base by the difference and reprint THIS.
+
+    Two are needed. Drops into the servo well; the servo body sits on it."""
+    t = SG_BASE - P["floor_t"]
+    # -0.6 diametral, not -0.3. At -0.3 the shim prints ~0.05/side over and the
+    # well ~0.05/side under, so it arrives at +0.05 per side and has to be
+    # forced - and a shim you have to force is a shim you cannot swap, which is
+    # the entire reason it is a separate part.
+    w, d = P["sg_l"]+2*P["clear"]-0.6, P["sg_w"]+2*P["clear"]-0.6
+    m = blk(0, w, 0, d, 0, t)
+    # finger holes, so a shim that has to come back out can be pushed out
+    for fx in (5.0, w-5.0):
+        m = diff(m, cyl_z(3.0, -1, t+1, fx, d/2))
+    return m
+
 def knob():
     """Turned profile, revolved. Prints face-down: the flat outer face is the
     whole bed contact, and every upward surface is under 50 deg."""
@@ -562,7 +589,8 @@ parts={"case_lower":rep("case_lower",case_lower()),
        "drawer":rep("drawer",drawer()),
        "rack":rep("rack",rack(assembly=False)),
        "knob":rep("knob",knob()),
-       "logo_inlay":rep("logo_inlay",logo_inlay()),"pinion":rep("pinion",pinion())}
+       "logo_inlay":rep("logo_inlay",logo_inlay()),"pinion":rep("pinion",pinion()),
+       "servo_shim":rep("servo_shim",servo_shim())}
 
 FLIP={"case_upper",          # top face down: crispest surface the machine makes
       "pinion"}              # gear face down. Horn pocket up: pocket-down left
@@ -645,6 +673,12 @@ chk("fin still keyed in the deck slot",fin_in_slot>=20.0,
     f"{fin_in_slot:.1f} mm of fin inside the slot at full travel")
 chk("drawer still supported by the deck",DR_D-TRAVEL>=20.0,
     f"{DR_D-TRAVEL:.1f} of {DR_D:.1f} mm still on the deck")
+chk("servo shim sets the servo height",
+    abs((parts["servo_shim"].extents[2] + P["floor_t"]) - SG_BASE) < 1e-6,
+    f"shim {parts['servo_shim'].extents[2]:.2f} + floor {P['floor_t']:.2f} = {SG_BASE:.2f}")
+chk("cradle walls never touch the ears first",
+    (SG_BASE + P["sg_ear"] - 1.9) < SG_BASE + P["sg_ear"] - 1.0,
+    f"wall top {SG_BASE+P['sg_ear']-1.9:.2f}, lowest plausible ear {SG_BASE+P['sg_ear']-1.0:.2f}")
 chk("servo fits under the deck",P["sg_h"]+SG_BASE<=P["deck_z"],f"{P['sg_h']+SG_BASE:.1f} of {P['deck_z']:.1f}")
 chk("ESP+breadboard clears the deck",
     P["floor_t"]+P["esp_h"] <= P["deck_z"]-1.0,
@@ -757,7 +791,7 @@ BED=256.0
 # nothing. Swap the spool between the two prints.
 PLATES=[("1_case",  "#F2F2F2FF", [("case_lower",1),("case_upper",1)]),
         ("2_mechanism", "#F2B705FF", [("deck",1),("drawer",2),("rack",2),
-                                   ("pinion",2),("logo_inlay",1)] +
+                                   ("pinion",2),("servo_shim",2),("logo_inlay",1)] +
                                   ([("knob",2)] if P["pull"]=="knob" else []))]
 
 def pack(items):
@@ -814,7 +848,7 @@ assert aw<=BED and ah<=BED, f"combined plate {aw:.0f}x{ah:.0f} exceeds bed"
 # inlay tucked in beside them. Three colours means two swaps if you print it
 # as one job - or hide what you are not running and do it in passes.
 ALL = [("case_lower",1), ("case_upper",1), ("logo_inlay",1),
-       ("deck",1), ("drawer",2), ("rack",2), ("pinion",2)]
+       ("deck",1), ("drawer",2), ("rack",2), ("pinion",2), ("servo_shim",2)]
 placed, x, y, row = [], 6.0, 6.0, 0.0
 for nm, q in ALL:
     mm = print_pose(nm)

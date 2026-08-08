@@ -250,8 +250,15 @@ fit("SG90 body in its pocket, length", P["sg_l"], poc_x, "dropin",
     "bought part: pocket shrinks, servo does not grow", male_printed=False)
 fit("SG90 body in its pocket, width",  P["sg_w"], poc_y, "dropin",
     male_printed=False)
-raw("floor left under the servo pocket", NA.SG_BASE - P["floor_t"], 1.20, 99.0,
-    "was 0.38 - the pocket ate the floor")
+shim = L("servo_shim")
+fit("servo shim in the servo well, length", shim.extents[0], poc_x, "location",
+    "shim sets the servo height, so it must not rock")
+fit("servo shim in the servo well, width", shim.extents[1], poc_y, "location")
+raw("shim + floor = servo body height", abs((shim.extents[2] + P["floor_t"]) - NA.SG_BASE),
+    0.0, 0.001, "if this drifts the pinion misses the rack")
+raw("cradle wall top below the servo ears",
+    (NA.SG_BASE + P["sg_ear"]) - (NA.SG_BASE + P["sg_ear"] - 1.9), 0.50, 3.00,
+    "ears must never land first and override the shim")
 
 # ── 8. LOGO INLAY -> POCKET ────────────────────────────────────────────
 inlay = L("logo_inlay")
