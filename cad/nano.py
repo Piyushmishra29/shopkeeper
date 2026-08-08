@@ -234,6 +234,13 @@ def case_lower():
             x=WL+9+i*13; y=WL+9+j*13
             if any((x-kx)**2+(y-ky)**2 < kr**2 for kx,ky,kr in keep): continue
             m=diff(m,cyl_z(8.0,-1,P["floor_t"]+1,x,y))
+    # ── alignment pins, 4 off, on the wall centreline ──
+    # Centreline is 1.0 from the outer face and the deck starts at 2.3, so
+    # these clear the deck without notching it. They locate the halves; the
+    # ledge and the walls still carry the load.
+    for (px_, py_) in ((CW/2, WL/2), (CW/2, CD-WL/2),
+                       (WL/2, CD/2), (CW-WL/2, CD/2)):
+        m=union([m, cyl_z(1.8, H, H+4.0, px_, py_)])
     return chamfer(m)
 
 def deck():
@@ -270,6 +277,10 @@ def case_upper():
     for ddx in (-16,16):
         m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,H-5,H-WL)])
     m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,2,14))
+    # sockets for case_lower's alignment pins
+    for (px_, py_) in ((CW/2, WL/2), (CW/2, CD-WL/2),
+                       (WL/2, CD/2), (CW-WL/2, CD/2)):
+        m=diff(m, cyl_z(2.15, -1, 4.5, px_, py_))
     return chamfer(m)
 
 RACK_L  = DR_D-6      # rack now runs nearly the full drawer
