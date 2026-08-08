@@ -32,7 +32,10 @@ FIN_T, FIN_SPAN, TOOTH_H = NA.P["fin_t"], NA.FIN_SPAN, NA.TOOTH_H
 PRESS, BL = NA.P["press"], NA.P["backlash"]
 
 PITCH_X = FIN_SPAN - ADD              # rack pitch line, rack-local x
-AXIS_X  = PITCH_X + R_P               # pinion axis, rack-local x
+# The BUILT centre distance, not the theoretical one. nano.py biases it out by
+# cd_bias to absorb the servo's pocket play; simulating the textbook 10.000
+# tests a pair that is not the one on the plate.
+AXIS_X  = PITCH_X + NA.CDIST          # pinion axis, rack-local x
 
 
 def pinion_2d():
@@ -120,7 +123,8 @@ if __name__ == "__main__":
     print("\nMESH SIM — shopkeeper NANO")
     print(f"  m{M} x {N}T, pressure {math.degrees(PRESS):.1f} deg, "
           f"addendum {ADD/M:.2f}m, backlash {BL:.2f} per flank")
-    print(f"  pitch radius {R_P:.2f}, centre distance {AXIS_X-PITCH_X:.3f}")
+    print(f"  pitch radius {R_P:.2f}, centre distance {AXIS_X-PITCH_X:.3f} "
+          f"(biased +{NA.P['cd_bias']:.2f} for servo pocket play)")
     print(f"  pinion tip thickness {2*NA.tooth_half_angle(NA.R_TIP)*NA.R_TIP:.3f} mm\n")
     phi, g0 = best_phase()
     if g0 is None:

@@ -151,8 +151,8 @@ tip_x   = blade[:, 0].max()
 pitch_x = tip_x - ADD                       # pitch line is one addendum in
 pin_axis_x = PIN_DX + FIN_T/2               # both now in RACK-local x
 centre = pin_axis_x - pitch_x
-chk("rack/pinion centre distance", abs(centre - R_P) < 0.20,
-    f"{centre:.3f} mm, needs {R_P:.3f}")
+chk("rack/pinion centre distance", abs(centre - NA.CDIST) < 0.05,
+    f"{centre:.3f} mm, needs {NA.CDIST:.3f} (R_P {R_P:.2f} + {NA.P['cd_bias']:.2f} bias)")
 
 # The pinion's height is NOT free - it is set by the servo it sits on. This
 # used to be hard-coded at FLOOR_T+27 and "passed" on 4.4 mm of a 5.0 face.

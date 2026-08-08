@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""
+FITCHECK — every mating fit, MEASURED off the shipped meshes.
+
+cad/tolerances.py computes fits from the parameters. That is worth having, but
+it can only ever tell you what the design INTENDED: it read a private copy of
+the parameters that had frozen two revisions back and printed a clean audit of
+a case that no longer existed. And the parameters have been right while the
+mesh was wrong more than once in this project - the rack's flange was correct
+in the source and 155 mm3 inside the drawer in the STL.
+
+So this file measures. It ray-casts through the actual STLs, finds the real
+hole and slot widths, and compares them to the real peg and blade widths.
+
+BANDS ARE FOR PLA, not PETG. The difference matters in one direction
+especially: PETG is tough and takes an interference fit by deforming, PLA is
+brittle and takes it by snapping. A 3.0 pin in a 3.35 socket is a normal PETG
+press fit and a broken PLA pin.
+"""
+import os, sys, math
+import numpy as np
+import trimesh
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+N    = os.path.join(HERE, "..", "nano")
+sys.path.insert(0, HERE)
+import nano as NA
+
+P = NA.P
+
+# ── PLA bands, per side unless stated ──────────────────────────────────
+BANDS = {
+    "press":    (-0.06,  0.00),   # PLA snaps rather than yields; almost no bite
+    "location": ( 0.08,  0.25),   # drops in by hand, stays put, glue or peg
+    "running":  ( 0.25,  0.60),   # slides without binding
+    "free":     ( 0.60, 99.00),   # must never touch
+    # A bought part gets its own band. An SG90 clone's body varies about
+    # 0.3 mm between batches, so a pocket held to the printed-part location
+    # band would refuse a fat one - and refusing to accept the servo is a
+    # worse failure than a little play, now that the centre distance is
+    # biased to absorb exactly this.
+    "dropin":   ( 0.15,  0.45),   # bought component into a printed pocket
+    "thread":   ( 1.60,  1.75),   # M2 self-tap pilot DIAMETER
+}
+
+rows, bad, warn = [], 0, 0
+
+
+def _runs(mesh, origin, direction, span=200.0):
+    """Solid intervals along a ray, as distances from origin."""
+    o = np.array(origin, float); d = np.array(direction, float)
+    d = d/np.linalg.norm(d)
+    rmi = trimesh.ray.ray_triangle.RayMeshIntersector(mesh)
+    locs, _, _ = rmi.intersects_location([o - d*span], [d])
+    if len(locs) == 0:
+        return []
+    t = np.sort(np.dot(locs - (o - d*span), d))
+    # weld hits that land on a shared edge
+    keep = [t[0]]
+    for v in t[1:]:
+        if v - keep[-1] > 1e-6:
+            keep.append(v)
+    t = np.array(keep) - span
+    if len(t) % 2:
+        return []
+    return [(t[i], t[i+1]) for i in range(0, len(t), 2)]
+
+
+def void(mesh, origin, direction, span=200.0):
+    """Width of the void CONTAINING the origin point.
+
+    Not "the first void along the ray" - that reads the case's own hollow
+    interior instead of the servo pocket, and a fin slot instead of a pin hole.
+    The ray has to be told which feature is meant, and the origin is what says
+    so: t=0 is the point aimed at."""
+    r = _runs(mesh, origin, direction, span)
+    if len(r) < 2:
+        return None
+    for (a0, a1), (b0, b1) in zip(r, r[1:]):
+        if a1 <= 0.0 <= b0:
+            return b0 - a1
+    return None
+
+
+def solid(mesh, origin, direction, span=200.0):
+    """Width of the solid run CONTAINING the origin point."""
+    r = _runs(mesh, origin, direction, span)
+    for a, b in r:
+        if a <= 0.0 <= b:
+            return b - a
+    return None
+
+
+# What the machine adds to what the model says. An FDM printer lays its walls
+# slightly proud, so a peg comes out over size and a hole comes out under size,
+# and the two errors ADD in the same direction - against the clearance. These
+# are ordinary generic-PLA figures for a 0.4 nozzle.
+GROW_EXT = 0.05      # per side, printed external feature (peg, blade, tooth)
+SHRINK_INT = 0.05    # per side, printed internal feature (hole, slot, pocket)
+
+
+def fit(name, male, female, kind, note="", male_printed=True):
+    """Judged on AS-PRINTED size, not nominal.
+
+    A fit is not a number in the model, it is what comes off the plate. Judging
+    the model number passes joints that seize and fails joints that are fine -
+    the pins are drawn deliberately loose precisely so they land in band once
+    the machine has had its say. male_printed=False for a bought part (the
+    servo does not grow; only the pocket around it shrinks)."""
+    global bad, warn
+    if male is None or female is None:
+        rows.append((name, "?", "?", "?", kind, "NO READ", note)); bad += 1; return
+    nom = (female - male)/2.0
+    asp = nom - SHRINK_INT - (GROW_EXT if male_printed else 0.0)
+    lo, hi = BANDS[kind]
+    if asp < lo - 1e-9:
+        v, sev = "TIGHT", 2
+    elif asp > hi + 1e-9:
+        v, sev = "LOOSE", 1
+    else:
+        v, sev = "ok", 0
+    bad += (sev == 2); warn += (sev == 1)
+    rows.append((name, f"{male:.3f}", f"{female:.3f}",
+                 f"{nom:+.3f} -> {asp:+.3f}", f"{kind} {lo:.2f}..{hi:.2f}", v, note))
+
+
+def raw(name, value, lo, hi, note=""):
+    global bad, warn
+    if value is None:
+        rows.append((name, "?", "?", "?", "-", "NO READ", note)); bad += 1; return
+    if value < lo - 1e-9:   v, sev = "UNDER", 2
+    elif value > hi + 1e-9: v, sev = "OVER", 1
+    else:                   v, sev = "ok", 0
+    bad += (sev == 2); warn += (sev == 1)
+    rows.append((name, "-", f"{value:.3f}", "-", f"{lo:.2f}..{hi:.2f}", v, note))
+
+
+L = lambda n: trimesh.load(os.path.join(N, n + ".stl"))
+case_lo, case_up = L("case_lower"), L("case_upper")
+deck, drawer, pinion = L("deck"), L("drawer"), L("pinion")
+rack_a = NA.rack(assembly=True)
+rack_stl = L("rack")
+
+print("\nFITCHECK — measured off the shipped STLs, PLA bands\n")
+
+# sanity: the shipped rack must be a rigid transform of the authoring pose
+raw("rack STL matches authoring pose (volume)",
+    abs(rack_stl.volume - rack_a.volume), 0.0, 0.01,
+    "print pose is only a flip - if this drifts, the fits below are fiction")
+
+# ── 1. ALIGNMENT PINS: case_lower -> deck -> case_upper ────────────────
+H, zt = NA.DECK, NA.DECK - P["deck_t"]
+for i, (hx, hy) in enumerate(NA.PIN_POS):
+    # cast along Y for the pins: an X ray at a rear corner also crosses the
+    # side wall, and at the front pin it crosses both fin slots
+    d_pin  = solid(case_lo, [hx, hy, H + 2.0], [0, 1, 0])
+    d_deck = void(deck, [hx - (NA.WL+0.3), hy - (NA.WL+0.3), 1.25], [0, 1, 0])
+    d_sock = void(case_up, [hx, hy, 2.0], [0, 1, 0])
+    tag = ["rear-L", "rear-R", "front"][i]
+    fit(f"pin {tag} in deck hole", d_pin, d_deck, "location", "deck drops over the pins")
+    fit(f"pin {tag} in upper socket", d_pin, d_sock, "location", "case halves register")
+
+# ── 2. RACK -> DRAWER ──────────────────────────────────────────────────
+# The blade is widest ACROSS A TOOTH, not between teeth. Measure at a tooth
+# centre or the slot looks twice as generous as it is.
+tooth_y = 0.5*NA.PITCH
+blade_w = solid(rack_a, [P["fin_t"]/2, tooth_y, -6.0], [1, 0, 0])
+slot_x  = void(drawer, [NA.FIN_X, NA.RACK_Y0 + tooth_y, 0.9], [1, 0, 0])
+fit("rack blade in drawer floor slot", blade_w, slot_x, "location",
+    "rack is pegged and glued, not sliding")
+
+# locating pegs
+peg_d  = solid(rack_a, [NA.PEG_X, 5.0, -0.9], [1, 0, 0])
+hole_d = void(drawer, [NA.FIN_X - P["fin_t"]/2 + NA.PEG_X,
+                       NA.RACK_Y0 + 5.0, 0.9], [1, 0, 0])
+fit("rack peg in drawer peg hole", peg_d, hole_d, "location", "pegged then glued")
+
+# THE ONE THAT SHIPPED BROKEN: the FLANGE footprint inside the drawer bin.
+# Only the flange sits in the bin - the blade passes through the floor slot -
+# so taking the whole rack's bounds reports the blade as fouling the bin and
+# hides whether the flange actually clears.
+fv = rack_a.vertices
+fl = fv[fv[:, 2] > 0.05]     # flange only. z > -0.01 also catches the
+                             # blade's top face, which spans y 0..49 and
+                             # reports the flange as fouling the bin
+bin_x0 = P["dr_wall"]; bin_x1 = NA.DR_W - P["dr_wall"]
+bin_y0 = P["dr_front"]; bin_y1 = NA.DR_D - P["dr_wall"]
+off_x = NA.FIN_X - P["fin_t"]/2
+fx0, fx1 = fl[:, 0].min() + off_x, fl[:, 0].max() + off_x
+fy0, fy1 = fl[:, 1].min() + NA.RACK_Y0, fl[:, 1].max() + NA.RACK_Y0
+raw("rack flange clears drawer bin, -X", fx0 - bin_x0, 0.30, 99.0, "was -0.34: cut the wall")
+raw("rack flange clears drawer bin, +X", bin_x1 - fx1, 0.30, 99.0)
+raw("rack flange clears drawer bin, -Y", fy0 - bin_y0, 0.20, 99.0, "was -3.00: through the front wall")
+raw("rack flange clears drawer bin, +Y", bin_y1 - fy1, 0.20, 99.0, "was -1.80: through the rear wall")
+
+# wall left outboard of the peg hole - this is what the slicer deletes
+peg_cx = NA.FIN_X - P["fin_t"]/2 + NA.PEG_X
+raw("drawer wall left beside peg hole", peg_cx - (NA.PEG_D + 0.25)/2, 1.20, 99.0,
+    "was 0.33 - under one extrusion, so the wall simply vanished")
+
+# ── 3. RACK -> DECK ────────────────────────────────────────────────────
+sx = NA.DR_X[0] + NA.FIN_X
+dslot = void(deck, [sx - (NA.WL+0.3), 30.0 - (NA.WL+0.3), 1.25], [1, 0, 0])
+fit("rack blade in deck slot", blade_w, dslot, "running",
+    "must also absorb the drawer's side play")
+
+# ── 4. DRAWER -> CASE ──────────────────────────────────────────────────
+dw, dh = drawer.extents[0], drawer.extents[2]
+mouth_w = void(case_up, [NA.DR_X[0] + NA.DR_W/2, 1.0, 9.0], [1, 0, 0])
+fit("drawer in its mouth, width", dw, mouth_w, "running", "left-right rattle")
+# Vertical is not a symmetric fit: the drawer RESTS on the deck, so all the
+# clearance is above it. Report the headroom, not a two-sided clearance.
+mouth_top = NA.DR_TOP + P["gap"] - NA.DECK
+raw("headroom above the drawer, at the mouth", mouth_top - (0.2 + dh), 0.30, 2.50,
+    "drawer sits on the deck; all clearance is on top")
+raw("headroom above the drawer, in the bay", (NA.CH - NA.DECK - NA.WL) - (0.2 + dh),
+    0.30, 6.00, "less is better - it is what lets an open drawer tip")
+
+# ── 5. PINION -> RACK (the gear pair) ──────────────────────────────────
+r_tip = float(np.max(np.linalg.norm(pinion.vertices[:, :2], axis=1)))
+raw("pinion tip radius", r_tip, NA.R_TIP - 0.05, NA.R_TIP + 0.05, f"design {NA.R_TIP:.3f}")
+rv = rack_a.vertices
+bl = rv[rv[:, 2] < -(P["dr_floor"] + 1.0)]
+tip_x = bl[:, 0].max()
+centre = (NA.PIN_DX + P["fin_t"]/2) - (tip_x - NA.ADD)
+raw("rack/pinion centre distance", centre, NA.CDIST - 0.05, NA.CDIST + 0.05,
+    f"design {NA.CDIST:.3f} = R_P {NA.R_P:.2f} + {P['cd_bias']:.2f} bias for servo play")
+# radial clearances: pinion tip to rack root, rack tip to pinion root
+raw("pinion tip to rack root", (NA.PIN_DX + P["fin_t"]/2 - NA.R_TIP) - P["fin_t"],
+    0.15, 99.0, "bottom clearance")
+raw("rack tip to pinion root",
+    (NA.PIN_DX + P["fin_t"]/2 - NA.R_ROOT) - NA.FIN_SPAN, 0.15, 99.0,
+    "bottom clearance the other way")
+# circular backlash, measured off the real 2D profiles
+import meshsim as MS
+phi, gap = MS.best_phase()
+raw("gear running clearance (measured)", gap, 0.20, 1.20,
+    "cad/meshsim.py, tightest gap through a full tooth cycle")
+
+# ── 6. PINION -> DECK ──────────────────────────────────────────────────
+px = NA.DR_X[0] + NA.FIN_X + NA.PIN_DX
+pbore = void(deck, [px - (NA.WL+0.3), P["wall"] + NA.PIN_Y - (NA.WL+0.3), 1.25], [1, 0, 0])
+fit("pinion in the deck clearance bore", 2*r_tip, pbore, "free", "gear must never touch")
+
+# ── 7. SERVO -> CRADLE ─────────────────────────────────────────────────
+sy_ = P["wall"] + NA.PIN_Y
+poc_x = void(case_lo, [px, sy_, NA.SG_BASE + 4.0], [1, 0, 0])
+poc_y = void(case_lo, [px, sy_, NA.SG_BASE + 4.0], [0, 1, 0])
+fit("SG90 body in its pocket, length", P["sg_l"], poc_x, "dropin",
+    "bought part: pocket shrinks, servo does not grow", male_printed=False)
+fit("SG90 body in its pocket, width",  P["sg_w"], poc_y, "dropin",
+    male_printed=False)
+raw("floor left under the servo pocket", NA.SG_BASE - P["floor_t"], 1.20, 99.0,
+    "was 0.38 - the pocket ate the floor")
+
+# ── 8. LOGO INLAY -> POCKET ────────────────────────────────────────────
+inlay = L("logo_inlay")
+raw("logo inlay proud of the case face", inlay.extents[2] - 1.4, 0.05, 0.40,
+    "sits in a 1.4 pocket; must read as embossed, not sunken")
+
+# ── 9. DECK -> CASE_LOWER LEDGE ────────────────────────────────────────
+dk_x, dk_y = deck.extents[0], deck.extents[1]
+raw("deck side clearance in the case", ((NA.CW - 2*NA.WL) - dk_x)/2, 0.15, 0.60,
+    "must drop in without forcing")
+raw("deck end clearance in the case", ((NA.CD - 2*NA.WL) - dk_y)/2, 0.15, 0.60)
+
+# ── report ─────────────────────────────────────────────────────────────
+w = [max(len(str(r[i])) for r in rows + [("fit", "male", "female",
+                                          "nominal -> as printed",
+                                          "band", "verdict", "note")])
+     for i in range(7)]
+hdr = ("fit", "male", "female", "nominal -> as printed", "band", "verdict", "note")
+print("  " + "  ".join(h.ljust(w[i]) for i, h in enumerate(hdr)))
+print("  " + "-" * (sum(w) + 12))
+for r in rows:
+    print("  " + "  ".join(str(r[i]).ljust(w[i]) for i in range(7)))
+print(f"\n  {bad} will not work, {warn} sloppy but will work\n")
+sys.exit(1 if bad else 0)

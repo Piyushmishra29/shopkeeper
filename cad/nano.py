@@ -47,6 +47,14 @@ P = dict(
     # mounting flange sits; sg_horn is the face the horn screws to.
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
     sg_base=6.0, sg_ear=15.9, sg_horn=26.5,
+    # The servo can rock +/-0.35 in its pocket, and that play points straight
+    # along the centre-distance axis. Measured (cad/meshsim.py): at -0.35 plus
+    # normal print growth the running gap is 0.013 mm, and at -0.45 it jams.
+    # The curve is one-sided - too close seizes, too far only adds backlash -
+    # so the centre distance is biased OUT by half the pocket play. Worst case
+    # is then 9.80 mm, which still runs at +0.10 growth. Free insurance: a rack
+    # and an involute pinion stay conjugate at any centre distance.
+    cd_bias=0.15,
     clear=0.35, gap=1.5,
     dr_d=55.0,
     esp_h=27.0,              # ESP32-S3 on its breadboard, pins connected
@@ -80,7 +88,10 @@ FIN_X  = DR_W * 0.20   # moved inboard so the bigger pinion's servo cradle
 # Pinion axis, measured from the rack's PITCH LINE - which sits one dedendum
 # out from the blade face, not at the tooth tip. Getting this wrong by one
 # addendum is the classic way to build a gear pair that binds.
-PIN_DX = P["fin_t"]/2 + DED + R_P               # pinion offset from FIN_X
+# NOT "CD" - that name is already the case depth, and shadowing it built the
+# whole case 10.15 mm deep instead of 74.
+CDIST  = R_P + P["cd_bias"]                     # design centre distance
+PIN_DX = P["fin_t"]/2 + DED + CDIST             # pinion offset from FIN_X
 PIN_Y  = 17.6
 # ── alignment pins: ONE definition, used by all three parts ──
 # case_lower grows them, deck is drilled for them, case_upper is socketed for
@@ -468,9 +479,13 @@ def drawer():
     m=diff(m,blk(FIN_X-P["fin_t"]/2-0.25, FIN_X-P["fin_t"]/2+FIN_SPAN+0.25,
                  RACK_Y0-0.3, RACK_Y0+RACK_L+0.3, -1, P["dr_floor"]+1))
     # locating peg holes, INBOARD of the slot - outboard put them 1.96 mm from
-    # the outer face and left 0.33 mm of wall
+    # the outer face and left 0.33 mm of wall.
+    # +0.45 diametral, not +0.25: the peg prints ~0.05/side over and the hole
+    # ~0.05/side under, so +0.25 nominal arrives as +0.025 per side. That is an
+    # interference fit, and a 3 mm PLA peg forced into one snaps rather than
+    # seats. +0.45 lands at +0.125 per side as printed.
     for py in (RACK_Y0+5, RACK_Y0+RACK_L-5):
-        m=diff(m,cyl_z(PEG_D+0.25,-1,P["dr_floor"]+1,FIN_X-P["fin_t"]/2+PEG_X,py))
+        m=diff(m,cyl_z(PEG_D+0.45,-1,P["dr_floor"]+1,FIN_X-P["fin_t"]/2+PEG_X,py))
     if P["pull"] == "knob":
         m=diff(m,cyl_y(4.1,-1,P["dr_front"]+1,W/2,H*0.55))
     else:
