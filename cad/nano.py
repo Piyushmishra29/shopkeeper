@@ -458,6 +458,12 @@ for lab,col,items in PLATES:
     # whichever spool is loaded, not from the file.
     write_3mf(path,[(n,m,px,py) for n,m,px,py in placed])
     o,b=verify(path)
+    # Also emit a plain STL per plate. An STL carries no filament, extruder or
+    # material data of any kind, so Bambu cannot ask for a mapping - it just
+    # slices with whatever filament the profile already has loaded.
+    merged=trimesh.util.concatenate(
+        [T(m.copy(),px,py,0) for _,m,px,py in placed])
+    merged.export(os.path.join(PL,f"plate_{lab}.stl"))
     print(f"\n  plate_{lab:9s} {w:5.0f} x {h:3.0f} mm   {g:5.1f} g   "
           f"{len(placed)} objects  ok={o==b}")
     for n,m,_,_ in placed: print(f"      {n}")
