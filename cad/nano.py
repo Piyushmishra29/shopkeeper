@@ -998,7 +998,12 @@ BED=256.0
 # ONE COLOUR PER PLATE. A single-nozzle machine changing colour mid-plate
 # purges a tower for every swap; splitting the plates costs nothing and wastes
 # nothing. Swap the spool between the two prints.
-PLATES=[("1_case",  "#F2F2F2FF", [("case_lower",1),("case_upper",1)]),
+# A test plate before the real one. Three questions it answers that no script
+# in this repo can: does the spline bore actually grip, do the printed teeth
+# actually drive, and does the machine hold the tooth profile at this size.
+# 16 g and twenty minutes against a 66 g plate.
+PLATES=[("0_gears", "#F2B705FF", [("spline_gauge",1),("pinion",2),("rack",1)]),
+        ("1_case",  "#F2F2F2FF", [("case_lower",1),("case_upper",1)]),
         ("2_mechanism", "#F2B705FF", [("deck",1),("drawer",2),("rack",2),
                                    ("pinion",2),("servo_shim",2),
                                    ("spline_gauge",1),("logo_inlay",1)] +
