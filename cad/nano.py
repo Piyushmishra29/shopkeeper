@@ -125,7 +125,7 @@ def rack_fin(length,h=None):
             [(t,yc-rt),(t+TOOTH_H,yc-tip),(t+TOOTH_H,yc+tip),(t,yc+rt)]),h))
     return union([base]+tt)
 
-LEDGE=3.0
+LEDGE=1.5
 
 def case_lower():
     """Mech bay, OPEN TOP. Prints floor-down with no ceiling anywhere.
@@ -149,24 +149,26 @@ def case_lower():
         # servo cradle: four walls up from the floor, open top so it drops in
         m=union([m,blk(px-P["sg_tab"]/2-2.0,px+P["sg_tab"]/2+2.0,
                        WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
-                       WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,WL,WL+13)])
+                       WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,P["floor_t"],P["floor_t"]+13)])
         m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
                      WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
-                     WL-1,WL+14))
+                     P["floor_t"]-1,P["floor_t"]+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
-            m=diff(m,cyl_z(1.7,WL,WL+13,px+tx,WL+PIN_Y))
+            m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
     for ddx in (-10.5,10.5):
         for ddy in (-24,24):
             m=union([m,cyl_z(5.0,P["floor_t"],P["floor_t"]+3.5,
                              CW*0.22+ddx,CD*0.55+ddy)])
             m=diff(m,cyl_z(1.7,P["floor_t"]+1,P["floor_t"]+4.5,
                            CW*0.22+ddx,CD*0.55+ddy))
-    m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,5,20))
+    for wx in (20,40,60):
+        m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
     for i in range(2):
-        z=6+i*7
-        for x in (-1,CW-WL-1):
-            m=diff(m,blk(x,x+WL+2,CD*0.34,CD*0.62,z,z+2.6))
+        z=8+i*8
+        for yy in (0.36,0.46,0.56):
+            m=diff(m,cyl_x(5.0,-1,WL+1,CD*yy,z))
+            m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
     keep+= [(CW/2, CD*0.78, 34.0)]
@@ -196,9 +198,15 @@ def case_upper():
     bed, the walls rise, and the drawer mouths open out of the top."""
     H=CH-DECK
     m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD-WL,-1,H-WL))
+    mouth_top=DR_TOP+P["gap"]-DECK
     for dx in DR_X:
-        m=diff(m,blk(dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5,
-                     -1,WL+1,-1,DR_TOP+P["gap"]-DECK))
+        x0,x1=dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5
+        m=diff(m,blk(x0,x1,-1,WL+1,-1,mouth_top))
+        # 45 deg relief above the mouth so the flipped print self-supports
+        w=blk(x0,x1,-4,4,-4,4)
+        w.apply_transform(trimesh.transformations.rotation_matrix(
+            math.radians(45),[1,0,0]))
+        m=diff(m,T(w,(x0+x1)/2,WL/2,mouth_top))
     m=diff(m,blk(CW/2-13,CW/2+13,CD*0.62-5,CD*0.62+5,H-WL-1,H+1))
     for ddx in (-26,26): m=diff(m,cyl_z(5.0,H-WL-1,H+1,CW/2+ddx,CD*0.62))
     for ddx in (-16,16):
