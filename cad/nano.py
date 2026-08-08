@@ -36,6 +36,7 @@ P = dict(
     fin_t=3.0, fin_h=8.0,
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
     clear=0.35, gap=0.8,
+    pull="cut",              # "cut" = scalloped finger pull, "knob" = press-fit knob
 )
 M, N   = P["module"], P["teeth"]
 R_P    = M*N/2                                  # 7.5
@@ -56,7 +57,7 @@ DR_X   = (WL + P["side_clear"],
           WL + P["side_clear"] + DR_W + P["mid_gap"])
 FIN_X  = DR_W * 0.30                            # in drawer-local coords
 PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P   # pinion offset from FIN_X
-PIN_Y  = 24.0
+PIN_Y  = 28.5
 
 def T(m,x=0,y=0,z=0): m.apply_translation([x,y,z]); return m
 def blk(x0,x1,y0,y1,z0,z1):
@@ -64,6 +65,10 @@ def blk(x0,x1,y0,y1,z0,z1):
     assert x1>x0 and y1>y0 and z1>z0, f"degenerate {x0,x1,y0,y1,z0,z1}"
     return T(box(extents=[x1-x0,y1-y0,z1-z0]),(x0+x1)/2,(y0+y1)/2,(z0+z1)/2)
 def cyl_z(d,z0,z1,x,y,s=48): return T(cylinder(radius=d/2,height=z1-z0,sections=s),x,y,(z0+z1)/2)
+def cyl_x(d,x0,x1,y,z,s=40):
+    c=cylinder(radius=d/2,height=x1-x0,sections=s)
+    c.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[0,1,0]))
+    return T(c,(x0+x1)/2,y,z)
 def cyl_y(d,y0,y1,x,z,s=40):
     c=cylinder(radius=d/2,height=y1-y0,sections=s)
     c.apply_transform(trimesh.transformations.rotation_matrix(-math.pi/2,[1,0,0]))
@@ -149,7 +154,7 @@ def case():
     return chamfer(m)
 
 RACK_L  = DR_D-16
-RACK_Y0 = 7.0+8.0          # rack start in drawer-part Y
+RACK_Y0 = 8.0              # rack start in drawer-part Y
 PEG_D   = 3.0
 
 def drawer():
@@ -160,7 +165,7 @@ def drawer():
     It is now a separate part that pegs in through a floor slot, which also makes
     the gear rack replaceable: it is the riskiest feature in the design."""
     W,D,H=DR_W,DR_D,P["dr_h"]
-    y0=7.0
+    y0=0.0                    # front face flush with the case, knob does the work
     m=diff(blk(0,W,y0,y0+D,0,H),
            blk(P["dr_wall"],W-P["dr_wall"],y0+P["dr_front"],y0+D-P["dr_wall"],
                P["dr_floor"],H+1))
@@ -170,9 +175,13 @@ def drawer():
     # locating peg holes either side of the slot
     for py in (RACK_Y0+5, RACK_Y0+RACK_L-5):
         m=diff(m,cyl_z(PEG_D+0.25,-1,P["dr_floor"]+1,FIN_X-P["fin_t"]/2-4.5,py))
-    # handle reaches the bed so it is not a cantilever either
-    m=union([m,blk(W*0.18,W*0.82,0,y0,0,H-3)])
-    m=diff(m,blk(W*0.24,W*0.76,-1,y0-1.4,6.5,H-5.5))
+    if P["pull"] == "knob":
+        m=diff(m,cyl_y(4.1,-1,P["dr_front"]+1,W/2,H*0.55))
+    else:
+        # scalloped finger pull cut into the top-front edge. It opens upward, so
+        # it is self-supporting - the void widens as the print rises.
+        m=diff(m,cyl_x(14.0,W/2-9,W/2+9,1.5,H))
+        m=diff(m,blk(W/2-9,W/2+9,-1,P["dr_front"]+0.5,H-1.2,H+1))
     return m
 
 def rack(assembly=True):
@@ -191,6 +200,13 @@ def rack(assembly=True):
         m.apply_translation(-m.bounds[0])
     return m
 
+def knob():
+    """Turned profile, revolved. Prints face-down: the flat outer face is the
+    whole bed contact, and every upward surface is under 50 deg."""
+    prof=np.array([[0.0,0.0],[5.5,0.0],[5.5,4.0],[3.0,7.0],
+                   [1.95,7.6],[1.95,13.0],[0.0,13.0]])
+    return trimesh.creation.revolve(prof, sections=64)
+
 def rep(n,m):
     e=m.extents
     print(f"  {n:9s} {e[0]:6.1f} x {e[1]:6.1f} x {e[2]:5.1f}   "
@@ -205,7 +221,8 @@ print(f"  pinion     m{M} x {N}T, pitch dia {2*R_P:.1f}")
 print(f"  travel     {TRAVEL:.1f} mm\n")
 
 parts={"case":rep("case",case()),"drawer":rep("drawer",drawer()),
-       "rack":rep("rack",rack(assembly=False)),"pinion":rep("pinion",pinion())}
+       "rack":rep("rack",rack(assembly=False)),
+       "knob":rep("knob",knob()),"pinion":rep("pinion",pinion())}
 
 def bed_ratio(m):
     """Bed-contact area as a fraction of the largest cross-section. A part that
@@ -264,8 +281,9 @@ for n,m in parts.items():
     r=bed_ratio(m)
     chk(f"{n} sits on the bed",r>=0.25,f"{r*100:.0f}% bed contact")
 
-tot=(parts["case"].volume + 2*parts["drawer"].volume
-     + 2*parts["rack"].volume + 2*parts["pinion"].volume)/1000*1.27
+tot=(parts["case"].volume + 2*parts["drawer"].volume + 2*parts["rack"].volume
+     + 2*parts["pinion"].volume
+     + (2*parts["knob"].volume if P["pull"]=="knob" else 0))/1000*1.27
 print(f"\n  {tot:.0f} g solid  (~{tot*0.85:.0f} g sliced)   vs MINI 187 g, cabinet 1365 g")
 if fails:
     print("  *** "+", ".join(fails)); sys.exit(1)
@@ -285,8 +303,12 @@ BED=256.0
 x,y,row=6.0,6.0,c.extents[1]
 L=[("case",c,6,6)]
 x=6+c.extents[0]+6
-for nm,mm in [("drawer_A",dd),("drawer_B",dd),("rack_A",rk2),("rack_B",rk2),
-              ("pinion_1",pn),("pinion_2",pn)]:
+kb=land(parts["knob"])
+_items=[("drawer_A",dd),("drawer_B",dd),("rack_A",rk2),("rack_B",rk2),
+        ("pinion_1",pn),("pinion_2",pn)]
+if P["pull"]=="knob":
+    _items[4:4]=[("knob_A",kb),("knob_B",kb)]
+for nm,mm in _items:
     if x+mm.extents[0] > BED-6:            # wrap, or the plate silently overruns
         x=6.0; y+=row+6.0; row=0.0
     L.append((nm,mm,x,y)); x+=mm.extents[0]+5; row=max(row,mm.extents[1])
