@@ -220,20 +220,26 @@ def case_lower():
     # floor -> centreline z = 16.4. Window centred on that with 5 mm each way.
     m=diff(m,blk(CW-WL-1, CW+1, EY-13.0, EY+13.0, 11.4, 21.4))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
-    for i in range(2):
-        z=8+i*8
-        for yy in (0.36,0.46,0.56):
-            m=diff(m,cyl_x(5.0,-1,WL+1,CD*yy,z))
-            m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
+    # Vertical louvres, not scattered holes. Reads as a designed grille, and
+    # vertical walls print themselves - only the 2.6 mm tops bridge.
+    for k in range(5):
+        yy = CD*0.30 + k*5.2
+        for x0,x1 in ((-1, WL+1), (CW-WL-1, CW+1)):
+            m=diff(m, blk(x0, x1, yy, yy+2.6, 7.0, 21.0))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
     keep+= [(CW/2, CD-23.0, 46.0)]
-    gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
-    for i in range(gx+1):
-        for j in range(gy+1):
-            x=WL+9+i*13; y=WL+9+j*13
+    # Hex honeycomb on an offset grid. Same weight saved, but it reads as
+    # engineered rather than as holes punched to save plastic.
+    PX, PY = 11.5, 10.0
+    gx=int((CW-2*WL-12)//PX); gy=int((CD-2*WL-12)//PY)
+    for j in range(gy+1):
+        for i in range(gx+1):
+            x = WL+8 + i*PX + (PX/2 if j % 2 else 0)
+            y = WL+8 + j*PY
+            if x > CW-WL-6 or y > CD-WL-6: continue
             if any((x-kx)**2+(y-ky)**2 < kr**2 for kx,ky,kr in keep): continue
-            m=diff(m,cyl_z(8.0,-1,P["floor_t"]+1,x,y))
+            m=diff(m, cyl_z(9.2, -1, P["floor_t"]+1, x, y, s=6))
     # ── alignment pins, on solid shoulders ──
     # Mid-wall pins stood in 2 mm of wall and would snap off. Corners are the
     # right idea, but the two FRONT corners sit inside the drawers' travel -
