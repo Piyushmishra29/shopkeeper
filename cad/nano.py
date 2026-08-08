@@ -101,8 +101,9 @@ def pinion():
     m=diff(m,cyl_z(2.6,P["gear_t"]+3.5,P["gear_t"]+6,0,0))
     return m
 
-def rack_fin(length):
-    h,t=P["fin_h"],P["fin_t"]
+def rack_fin(length,h=None):
+    h=P["fin_h"] if h is None else h
+    t=P["fin_t"]
     base=blk(0,t,0,length,0,h); tt=[]
     for i in range(int(length/PITCH)):
         yc=(i+0.5)*PITCH
@@ -112,45 +113,71 @@ def rack_fin(length):
             [(t,yc-bot),(t+TOOTH_H,yc-top),(t+TOOTH_H,yc+top),(t,yc+bot)]),h))
     return union([base]+tt)
 
-def case():
-    m=diff(blk(0,CW,0,CD,0,CH), blk(WL,CW-WL,WL,CD+1,WL,CH-WL))
-    m=union([m,blk(WL,CW-WL,WL,CD-WL,P["deck_z"],DECK)])
-    for i,dx in enumerate(DR_X):
+LEDGE=3.0
+
+def case_lower():
+    """Mech bay, OPEN TOP. Prints floor-down with no ceiling anywhere."""
+    H=DECK                     # rim finishes flush with the deck's top face
+    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,WL,H+1))
+    # ledge the deck drops onto
+    m=union([m,blk(WL,CW-WL,WL,CD-WL,H-P["deck_t"]-LEDGE,H-P["deck_t"])])
+    # NO front rail: it sat directly in the path of both drive fins. The deck
+    # rests on the two sides and the rear, which is plenty for a 2.5 mm plate.
+    m=diff(m,blk(WL+LEDGE,CW-WL-LEDGE,WL-1,CD-WL-LEDGE,
+                 H-P["deck_t"]-LEDGE-1,H+1))
+    for dx in DR_X:
         sx=dx+FIN_X
+        # the fin must pass through the FRONT WALL as well as the deck
+        m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
+                     -1,WL+1,DECK-P["fin_h"]-1.5,DECK+1))
         px=dx+FIN_X+PIN_DX
-        # fin slot: full tooth width AND full fin height, through the front wall
-        m=diff(m,blk(sx-P["fin_t"]/2-1.2, sx-P["fin_t"]/2+FIN_SPAN+1.2,
-                     -1, CD-WL-3, DECK-P["fin_h"]-1.5, DECK+1))
-        # pinion pocket + servo well, both under the deck
-        m=diff(m,cyl_z(2*R_TIP+2.5,WL,DECK+1,px,WL+PIN_Y))
+        # servo cradle: four walls up from the floor, open top so it drops in
+        m=union([m,blk(px-P["sg_l"]/2-P["clear"]-1.6,px+P["sg_l"]/2+P["clear"]+1.6,
+                       WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
+                       WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,WL,WL+13)])
         m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
                      WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
-                     -1,P["deck_z"]))
+                     WL-1,WL+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
-            m=diff(m,cyl_z(1.7,2.5,P["deck_z"],px+tx,WL+PIN_Y))
-        # drawer mouth
-        m=diff(m,blk(dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5,
-                     -1,WL+1,DECK-0.6,DR_TOP+P["gap"]))
-    # ESP32-S3 posts on the floor, rear half
+            m=diff(m,cyl_z(1.7,WL,WL+13,px+tx,WL+PIN_Y))
     for ddx in (-24,24):
         for ddy in (-10.5,10.5):
             m=union([m,cyl_z(5.0,WL,WL+3.5,CW/2+ddx,CD*0.78+ddy)])
             m=diff(m,cyl_z(1.7,WL+1,WL+4.5,CW/2+ddx,CD*0.78+ddy))
-    # rear service window + DC jack
     m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,5,20))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
-    # top face: OLED window + 2 LEDs
-    m=diff(m,blk(CW/2-13,CW/2+13,CD*0.62-5,CD*0.62+5,CH-WL-1,CH+1))
-    for ddx in (-26,26): m=diff(m,cyl_z(5.0,CH-WL-1,CH+1,CW/2+ddx,CD*0.62))
-    for ddx in (-16,16):
-        # posts must start ABOVE the drawer envelope - at CH-12 they hung
-        # straight into the drawer's path and blocked full travel
-        m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,CH-5,CH-WL)])
-    # side vents
     for i in range(2):
         z=6+i*7
         for x in (-1,CW-WL-1):
             m=diff(m,blk(x,x+WL+2,CD*0.34,CD*0.62,z,z+2.6))
+    return chamfer(m)
+
+def deck():
+    """Flat plate, prints on its face. It used to be the case's ceiling, which
+    meant an 88 x 62 bridge in mid-air."""
+    m=blk(WL+0.3,CW-WL-0.3,WL+0.3,CD-WL-0.3,0,P["deck_t"])
+    for dx in DR_X:
+        sx=dx+FIN_X
+        px=dx+FIN_X+PIN_DX
+        m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
+                     -1,CD-WL-3,-1,P["deck_t"]+1))
+        m=diff(m,cyl_z(2*R_TIP+2.5,-1,P["deck_t"]+1,px,WL+PIN_Y))
+    m.apply_translation([-(WL+0.3),-(WL+0.3),0])
+    return m
+
+def case_upper():
+    """Drawer bay + top face. Printed UPSIDE DOWN: the top face lands on the
+    bed, the walls rise, and the drawer mouths open out of the top."""
+    H=CH-DECK
+    m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD+1,-1,H-WL))
+    for dx in DR_X:
+        m=diff(m,blk(dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5,
+                     -1,WL+1,-1,DR_TOP+P["gap"]-DECK))
+    m=diff(m,blk(CW/2-13,CW/2+13,CD*0.62-5,CD*0.62+5,H-WL-1,H+1))
+    for ddx in (-26,26): m=diff(m,cyl_z(5.0,H-WL-1,H+1,CW/2+ddx,CD*0.62))
+    for ddx in (-16,16):
+        m=union([m,blk(CW/2+ddx-2,CW/2+ddx+2,CD*0.62-3,CD*0.62+3,H-5,H-WL)])
+    m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,2,14))
     return chamfer(m)
 
 RACK_L  = DR_D-16
@@ -190,7 +217,7 @@ def rack(assembly=True):
     so the flip happens once, at plating time, and never in the fit maths."""
     L=RACK_L; drop=P["fin_h"]+P["dr_floor"]
     fl=blk(-5.0,P["fin_t"]+5.0,-3.0,L+3.0,0,2.0)
-    blade=rack_fin(L)
+    blade=rack_fin(L,h=drop)      # must reach the flange, not stop 1.8 mm short
     blade.apply_translation([0,0,-drop])
     m=union([fl,blade])
     for py in (5.0,L-5.0):
@@ -220,11 +247,21 @@ print(f"  bin usable {DR_W-2*P['dr_wall']:.0f} x {DR_D-P['dr_wall']-P['dr_front'
 print(f"  pinion     m{M} x {N}T, pitch dia {2*R_P:.1f}")
 print(f"  travel     {TRAVEL:.1f} mm\n")
 
-parts={"case":rep("case",case()),"drawer":rep("drawer",drawer()),
+CASE_ASM=None
+parts={"case_lower":rep("case_lower",case_lower()),
+       "deck":rep("deck",deck()),
+       "case_upper":rep("case_upper",case_upper()),
+       "drawer":rep("drawer",drawer()),
        "rack":rep("rack",rack(assembly=False)),
        "knob":rep("knob",knob()),"pinion":rep("pinion",pinion())}
 
-def bed_ratio(m):
+FLIP={"case_upper"}          # printed top-face-down
+
+def bed_ratio(m,name=""):
+    if name in FLIP:
+        m=m.copy()
+        m.apply_transform(trimesh.transformations.rotation_matrix(math.pi,[1,0,0]))
+        m.apply_translation(-m.bounds[0])
     """Bed-contact area as a fraction of the largest cross-section. A part that
     stands on a sliver of itself will topple or print in mid-air; the old drawer
     scored 4%."""
@@ -242,8 +279,14 @@ def chk(l,c,d):
 d0=parts["drawer"]
 y_closed=(CD-WL-1.2)-d0.extents[1]
 # assembly pose: drawer floor on the deck, rack flipped blade-down through it
+# the case is three parts now; assemble them for the interference sweep
+_lo=parts["case_lower"].copy()
+_dk=parts["deck"].copy();  _dk.apply_translation([WL+0.3,WL+0.3,DECK-P["deck_t"]])
+_up=parts["case_upper"].copy(); _up.apply_translation([0,0,DECK])
+CASE_ASM=trimesh.util.concatenate([_lo,_dk,_up])
+
 rk=rack(assembly=True)
-rk.apply_translation([FIN_X-P["fin_t"]/2, RACK_Y0, DECK+P["dr_floor"]])
+rk.apply_translation([FIN_X-P["fin_t"]/2, RACK_Y0, DECK+P["dr_floor"]+0.2])
 worst,wy,wslot=0.0,None,None
 for slot,dx in enumerate(DR_X):
     for pull in (0,8,16,TRAVEL):
@@ -251,7 +294,7 @@ for slot,dx in enumerate(DR_X):
         for a in asm: a.apply_translation([dx, y_closed-pull, 0])
         asm[0].apply_translation([0,0,DECK+0.2])
         h=trimesh.boolean.intersection(
-            [trimesh.util.concatenate(asm), parts["case"]], engine="manifold")
+            [trimesh.util.concatenate(asm), CASE_ASM], engine="manifold")
         v=float(h.volume)
         if v>worst:
             worst,wy,wslot=v,pull,slot
@@ -278,10 +321,11 @@ chk("the two servos do not clash",
 chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-WL-2:.1f}")
 chk("all watertight",all(m.is_watertight for m in parts.values()),"")
 for n,m in parts.items():
-    r=bed_ratio(m)
+    r=bed_ratio(m,n)
     chk(f"{n} sits on the bed",r>=0.25,f"{r*100:.0f}% bed contact")
 
-tot=(parts["case"].volume + 2*parts["drawer"].volume + 2*parts["rack"].volume
+tot=(parts["case_lower"].volume + parts["deck"].volume
+     + parts["case_upper"].volume + 2*parts["drawer"].volume + 2*parts["rack"].volume
      + 2*parts["pinion"].volume
      + (2*parts["knob"].volume if P["pull"]=="knob" else 0))/1000*1.27
 print(f"\n  {tot:.0f} g solid  (~{tot*0.85:.0f} g sliced)   vs MINI 187 g, cabinet 1365 g")
@@ -297,12 +341,21 @@ def land(m):
         m.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2,[0,0,1]))
         m.apply_translation(-m.bounds[0])
     return m
-c,dd,rk2,pn=(land(parts["case"]),land(parts["drawer"]),
-             land(parts["rack"]),land(parts["pinion"]))
+dd,rk2,pn=(land(parts["drawer"]),land(parts["rack"]),land(parts["pinion"]))
+c=land(parts["case_lower"])
 BED=256.0
 x,y,row=6.0,6.0,c.extents[1]
-L=[("case",c,6,6)]
+L=[("case_lower",c,6,6)]
 x=6+c.extents[0]+6
+def print_pose(nm):
+    mm=parts[nm].copy()
+    if nm in FLIP:
+        mm.apply_transform(trimesh.transformations.rotation_matrix(math.pi,[1,0,0]))
+    return land(mm)
+for nm in ("case_upper","deck"):
+    mm=print_pose(nm)
+    if x+mm.extents[0]>BED-6: x=6.0; y+=row+6.0; row=0.0
+    L.append((nm,mm,x,y)); x+=mm.extents[0]+5; row=max(row,mm.extents[1])
 kb=land(parts["knob"])
 _items=[("drawer_A",dd),("drawer_B",dd),("rack_A",rk2),("rack_B",rk2),
         ("pinion_1",pn),("pinion_2",pn)]
