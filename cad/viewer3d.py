@@ -79,7 +79,7 @@ NAMES = ["case_lower", "case_upper", "deck", "drawer", "rack", "pinion",
          "servo_shim", "knob"]
 # Bought parts. Drawn so the render shows the machine, not just the plastic -
 # but kept out of the BOM totals, because you do not print an SG90.
-EXTRA = ["servo", "esp"]
+EXTRA = ["servo", "servo_m", "esp"]
 # keep = leave the mesh alone; the STLs are already low-poly.
 # case_lower is the part you look at most and the one carrying the honeycomb
 # floor, so it gets a higher budget now that the rig makes detail legible.
@@ -195,13 +195,13 @@ def build_servo():
     """SG90, modelled about its OUTPUT SHAFT at the origin, sitting on the shim.
 
     x is measured from the shaft because that is what the case locates: the
-    shaft is the pinion axis. The body hangs 5.9 mm one side and 16.9 the
+    shaft is the pinion axis. The body hangs sg_shaft one side and the rest the
     other, which is why the cradle is not symmetric."""
     sl, sw, sh = P["sg_l"], P["sg_w"], P["sg_h"]
-    # the output shaft sits 5.9 mm in from one end of the body
-    x0, x1 = -5.9, -5.9 + sl
+    x0, x1 = -P["sg_shaft"], -P["sg_shaft"] + sl
     parts = [_box(x0, x1, -sw/2, sw/2, SG_BASE, SG_BASE + sh)]          # body
-    parts.append(_box(-P["sg_tab"]/2, P["sg_tab"]/2, -sw/2, sw/2,       # ears
+    bc = (x0 + x1) / 2                       # ears centre on the BODY
+    parts.append(_box(bc - P["sg_tab"]/2, bc + P["sg_tab"]/2, -sw/2, sw/2,
                       SG_BASE + P["sg_ear"], SG_BASE + P["sg_ear"] + 2.5))
     parts.append(_cyl(11.5, SG_BASE + sh, SG_BASE + sh + 3.0))          # gear boss
     parts.append(_cyl(4.8, SG_BASE + sh + 3.0, SG_HORN))                # spline
@@ -227,7 +227,12 @@ def build_esp():
                               z0 + bb_h, z0 + P["esp_h"]))
     return trimesh.util.concatenate(parts)
 
-extra_raw = {"servo": build_servo(), "esp": build_esp()}
+_sv = build_servo()
+_svm = _sv.copy(); _svm.apply_transform(np.diag([-1.0, 1.0, 1.0, 1.0]))
+# no .invert() here: trimesh already flips the winding itself when the
+# transform has a negative determinant, so doing it again turns the mesh
+# inside out and every face gets back-face culled
+extra_raw = {"servo": _sv, "servo_m": _svm, "esp": build_esp()}
 for n in EXTRA:
     m = extra_raw[n]
     grams[n] = 0.0                                # bought, not printed
@@ -282,8 +287,10 @@ for i, dx in enumerate(DR_X):
     add("pinion", (dx + FIN_X + PIN_DX, WL + PIN_Y,     PIN_Z),
         (side*18, -62, 22), spin=1, ph=PIN_PHASE,
         lab=("pinion" if i == 0 else None), ly=26)
-    # the servo, directly under its own pinion, and the shim it stands on
-    add("servo", (dx + FIN_X + PIN_DX, WL + PIN_Y, 0),
+    # The servo, under its own pinion. Slot 1 is MIRRORED: the shaft is 5.9 mm
+    # from one end of the body, so pointing both the same way puts slot 1's
+    # mounting ear through the right-hand wall.
+    add("servo" if i == 0 else "servo_m", (dx + FIN_X + PIN_DX, WL + PIN_Y, 0),
         (side*18, -62, -18), lab=("SG90" if i == 0 else None), ly=14)
     add("servo_shim", (dx + FIN_X + PIN_DX - (P["sg_l"]+2*P["clear"]-0.6)/2,
                        WL + PIN_Y - (P["sg_w"]+2*P["clear"]-0.6)/2, P["floor_t"]),
@@ -326,13 +333,14 @@ print(f"  fit exploded   c={fitE_c} r={fitE_r}")
 
 MAT = {"case_lower": "shellB", "case_upper": "shellA", "deck": "gold",
        "drawer": "gold", "rack": "gold", "pinion": "gold", "knob": "gold",
-       "servo_shim": "gold", "servo": "blue", "esp": "board"}
+       "servo_shim": "gold", "servo": "blue", "servo_m": "blue",
+       "esp": "board"}
 COL = {"shellA": "#EDEDF2", "shellB": "#D8D8DF", "gold": "#F2B705",
        "blue": "#2F6FE4", "board": "#1F7A4D"}
 
 QTY  = {"case_lower": 1, "case_upper": 1, "deck": 1,
         "drawer": 2, "rack": 2, "pinion": 2, "servo_shim": 2, "knob": 2,
-        "servo": 2, "esp": 1}
+        "servo": 1, "servo_m": 1, "esp": 1}
 BLURB = {
  "case_lower": "mech bay, open top &mdash; servos, pinions, ESP32",
  "case_upper": "drawer bay + top face, printed upside down",
@@ -343,6 +351,7 @@ BLURB = {
  "servo_shim": "sets the servo height &mdash; reprint this, not the case",
  "knob":       "optional press-fit pull &mdash; unused with the scalloped cut",
  "servo":      "SG90, bought &mdash; drives one drawer through its pinion",
+ "servo_m":    "SG90, mirrored &mdash; its shaft is 5.9 mm off the body centre",
  "esp":        "ESP32-S3 on a half breadboard, bought &mdash; no soldering",
 }
 
@@ -588,7 +597,7 @@ var stage = document.getElementById('v3d-stage');
 var cv = document.getElementById('v3d-cv');
 var ctx = cv.getContext('2d', { alpha: false });
 var labWrap = document.getElementById('v3d-labels');
-var W = 0, H = 0, DPR = 1;
+var W = 0, H = 0, DPR = 1, DPR0 = 1, QUAL = 1, runFrames = 0;
 
 /* ── labels ───────────────────────────────────────────────────────────── */
 var LABS = [];
@@ -606,7 +615,12 @@ INST.forEach(function (I, i) {
 /* ── sizing ───────────────────────────────────────────────────────────── */
 function resize() {
   var r = stage.getBoundingClientRect();
-  DPR = Math.min(2, window.devicePixelRatio || 1);
+  /* Pixel fill is the single biggest per-frame cost, so drop resolution
+     WHILE the view is moving and put it back the moment it settles. Nobody
+     can see 40% fewer pixels on a spinning model; everybody feels the frame
+     rate. */
+  DPR0 = Math.min(2, window.devicePixelRatio || 1);
+  DPR = DPR0 * QUAL;
   W = Math.max(2, Math.round(r.width));
   H = Math.max(2, Math.round(r.height));
   cv.width = Math.round(W * DPR);
@@ -829,13 +843,45 @@ function draw() {
       if (si < 0) si = 0; else if (si > LEV - 1) si = LEV - 1;
       tI[nt] = ii; tF[nt] = j; tS[nt] = si;
       tD[nt] = za + zb + zc;
-      ord[nt] = nt; nt++;
+      nt++;      /* the counting sort fills ord; no identity pass needed */
     }
   }
 
-  /* ── painter's algorithm ────────────────────────────────────────────── */
-  ord.length = nt;
-  ord.sort(function (p, q) { return tD[q] - tD[p]; });
+  /* ── painter's algorithm ──────────────────────────────────────────────
+     Counting sort, not Array.sort. A comparator call per comparison over
+     ~17k triangles every frame was most of the frame budget; bucketing depth
+     is O(n) and needs no calls at all. 4096 buckets over the actual depth
+     range puts co-bucketed triangles within a fraction of a millimetre of
+     each other, which is far finer than the average-depth approximation this
+     algorithm rests on anyway. */
+  var NB = 4096;
+  if (!draw._cnt || draw._cnt.length !== NB + 1) {
+    draw._cnt = new Int32Array(NB + 1);
+    draw._ordS = new Int32Array(tD.length);
+  }
+  var cnt = draw._cnt, ordS = draw._ordS;
+  if (ordS.length < nt) { ordS = draw._ordS = new Int32Array(tD.length); }
+  var dmin = Infinity, dmax = -Infinity, kk;
+  for (kk = 0; kk < nt; kk++) {
+    var dv = tD[kk];
+    if (dv < dmin) dmin = dv;
+    if (dv > dmax) dmax = dv;
+  }
+  var span = dmax - dmin;
+  if (!(span > 0)) span = 1;
+  var scale = (NB - 1) / span;
+  cnt.fill(0);
+  var bidx = draw._b && draw._b.length >= nt ? draw._b
+           : (draw._b = new Int32Array(tD.length));
+  for (kk = 0; kk < nt; kk++) {
+    /* far first: invert the bucket so index 0 is the DEEPEST */
+    var bi = (NB - 1) - (((tD[kk] - dmin) * scale) | 0);
+    if (bi < 0) bi = 0; else if (bi >= NB) bi = NB - 1;
+    bidx[kk] = bi; cnt[bi + 1]++;
+  }
+  for (kk = 0; kk < NB; kk++) cnt[kk + 1] += cnt[kk];
+  for (kk = 0; kk < nt; kk++) ordS[cnt[bidx[kk]]++] = kk;
+  ord = ordS;
 
   ctx.lineJoin = 'round';
   ctx.lineWidth = 0.9;
@@ -914,7 +960,11 @@ function tick(ts) {
     setPull(TRAVEL * f, false);
     dirty = true;
   }
-  if (dirty) { dirty = false; draw(); }
+  if (dirty) { dirty = false; draw(); runFrames++; } else { runFrames = 0; }
+  /* three drawn frames back to back means the user is dragging or something is
+     animating. One idle frame is enough to call it settled. */
+  var wantQ = runFrames > 2 ? 0.62 : 1;
+  if (wantQ !== QUAL) { QUAL = wantQ; resize(); }
 }
 
 /* ── controls ─────────────────────────────────────────────────────────── */

@@ -90,11 +90,16 @@ def drawer_at(slot, pull):
 # pedestal at SG_BASE - not on the floor. The servo's height is what sets the
 # pinion's height, so getting it wrong here hides the whole stack-up.
 def servo_at(slot):
-    px = DR_X[slot] + FIN_X + PIN_DX
+    # Centred on the BODY, not on the shaft. This proxy used to sit centred on
+    # the pinion axis - which agreed perfectly with a pocket that was also
+    # centred on the pinion axis, so the pair of them confirmed each other and
+    # the real servo would have fitted neither.
+    px  = DR_X[slot] + FIN_X + PIN_DX
+    bcx = NA.sg_body_cx(slot, px)
     body = box(extents=[SG_L, SG_W, SG_H])
-    body.apply_translation([px, WL + PIN_Y, SG_BASE + SG_H/2])
+    body.apply_translation([bcx, WL + PIN_Y, SG_BASE + SG_H/2])
     tabs = box(extents=[SG_TAB, SG_W, 2.5])
-    tabs.apply_translation([px, WL + PIN_Y, SG_BASE + SG_EAR + 1.25])
+    tabs.apply_translation([bcx, WL + PIN_Y, SG_BASE + SG_EAR + 1.25])
     return trimesh.util.concatenate([body, tabs])
 
 STATIC = {"case_lower": case_lo, "deck": deck, "case_upper": case_up,

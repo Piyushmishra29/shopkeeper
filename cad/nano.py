@@ -47,6 +47,13 @@ P = dict(
     # mounting flange sits; sg_horn is the face the horn screws to.
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
     sg_base=6.0, sg_ear=15.9, sg_horn=26.5,
+    # THE OUTPUT SHAFT IS NOT IN THE MIDDLE OF THE BODY. It sits ~5.9 mm from
+    # one end, which is plain to see on the part and was modelled nowhere: the
+    # pocket was centred on the pinion axis, so the servo either would not go
+    # in at all (863 mm3 of interference) or, if it did, would put its shaft
+    # 5.5 mm off the axis - a centre-distance error half as big as the pitch
+    # radius. The gear could never have meshed.
+    sg_shaft=5.9,
     # The servo can rock +/-0.35 in its pocket, and that play points straight
     # along the centre-distance axis. Measured (cad/meshsim.py): at -0.35 plus
     # normal print growth the running gap is 0.013 mm, and at -0.45 it jams.
@@ -98,6 +105,13 @@ FIN_X  = DR_W * 0.20   # moved inboard so the bigger pinion's servo cradle
 CDIST  = R_P + P["cd_bias"]                     # design centre distance
 PIN_DX = P["fin_t"]/2 + DED + CDIST             # pinion offset from FIN_X
 PIN_Y  = 17.6
+# Which way each servo's body points from its own shaft. Slot 1 MUST run -x:
+# pointing +x puts its mounting ear 1.77 mm through the right-hand wall.
+SG_DIR = (+1, -1)
+def sg_body_cx(slot, px):
+    """Centre of the servo BODY, given the pinion axis. The ears are centred on
+    the body, not on the shaft, so every mount feature hangs off this."""
+    return px + SG_DIR[slot]*(P["sg_l"]/2 - P["sg_shaft"])
 # ── alignment pins: ONE definition, used by all three parts ──
 # case_lower grows them, deck is drilled for them, case_upper is socketed for
 # them. Three parts reading one list is the only way they stay in agreement.
@@ -248,7 +262,7 @@ def case_lower():
     m=union([m,prism_y([(CW-WL,zt),(CW-WL-LEDGE,zt),(CW-WL,zt-LEDGE)],WL,CD-WL)])
     m=union([m,prism_x([(CD-WL,zt),(CD-WL-LEDGE,zt),(CD-WL,zt-LEDGE)],
                        WL,CW-WL)])
-    for dx in DR_X:
+    for _slot, dx in enumerate(DR_X):
         sx=dx+FIN_X
         # the fin must pass through the FRONT WALL as well as the deck
         m=diff(m,blk(sx-P["fin_t"]/2-1.2,sx-P["fin_t"]/2+FIN_SPAN+1.2,
@@ -262,23 +276,24 @@ def case_lower():
         # separate 2 g part now. If your servo measures differently, reprint
         # the shim; the case does not care.
         CRT = SG_BASE + P["sg_ear"] - 1.9       # walls stop BELOW the lowest ear
-        m=union([m,blk(px-P["sg_tab"]/2-2.0,px+P["sg_tab"]/2+2.0,
+        bcx = sg_body_cx(_slot, px)             # everything hangs off the BODY
+        m=union([m,blk(bcx-P["sg_tab"]/2-2.0,bcx+P["sg_tab"]/2+2.0,
                        WL+PIN_Y-P["sg_w"]/2-P["clear"]-1.6,
                        WL+PIN_Y+P["sg_w"]/2+P["clear"]+1.6,P["floor_t"],CRT)])
         # Well goes down to the FLOOR. The shim, not the case, sets the height,
         # and the walls end low enough that the ears can never land on them
         # first and override it.
-        m=diff(m,blk(px-P["sg_l"]/2-P["clear"],px+P["sg_l"]/2+P["clear"],
+        m=diff(m,blk(bcx-P["sg_l"]/2-P["clear"],bcx+P["sg_l"]/2+P["clear"],
                      WL+PIN_Y-P["sg_w"]/2-P["clear"],WL+PIN_Y+P["sg_w"]/2+P["clear"],
                      P["floor_t"],CRT+1))
         # cable notch: an SG90's lead leaves the side of the body low down, and
         # a closed 1.6 mm wall all the way round traps it
-        m=diff(m,blk(px-11.0,px-5.0,WL+PIN_Y-9.0,WL+PIN_Y-5.0,
+        m=diff(m,blk(bcx-11.0,bcx-5.0,WL+PIN_Y-9.0,WL+PIN_Y-5.0,
                      P["floor_t"],SG_BASE+9.0))
         # Pilot holes as vertical SLOTS. Clone SG90s vary about 1 mm in where
         # the flange sits, and a round hole that misses is worse than useless.
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
-            m=diff(m,blk(px+tx-0.85,px+tx+0.85,
+            m=diff(m,blk(bcx+tx-0.85,bcx+tx+0.85,
                          WL+PIN_Y-0.85,WL+PIN_Y+0.85,CRT-5.5,CRT+1))
     # ── ESP32-S3 DevKit ON ITS BREADBOARD, behind the servos ──
     # Measured assembly: 81.5 long x 35.5 across x ~15 tall, board plugged into
@@ -335,7 +350,8 @@ def case_lower():
         for x0,x1 in ((-1, WL+1), (CW-WL-1, CW+1)):
             m=diff(m, blk(x0, x1, yy, yy+2.6, 7.0, 21.0))
     # lightening holes, skipping anything mounted to the floor
-    keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
+    keep=[(sg_body_cx(_s, dx+FIN_X+PIN_DX), WL+PIN_Y, 21.0)
+          for _s, dx in enumerate(DR_X)]
     keep+= [(CW/2, CD-23.0, 46.0)]
     # Hex honeycomb on an offset grid. Same weight saved, but it reads as
     # engineered rather than as holes punched to save plastic.
@@ -758,9 +774,20 @@ chk("pinion clears the drawer floor", GEAR_Z1 <= DECK+0.2,
 # involute sanity: a tip thinner than one extrusion is a tip the machine rounds
 _tip = 2*tooth_half_angle(R_TIP)*R_TIP
 chk("pinion tooth tip is printable", _tip >= 0.60, f"{_tip:.3f} mm at the tip")
-chk("the two servos do not clash",
-    (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),
-    f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
+_sgb = []
+for _s, _dx in enumerate(DR_X):
+    _px = _dx + FIN_X + PIN_DX
+    _bc = sg_body_cx(_s, _px)
+    _sgb.append((_bc - P["sg_l"]/2, _bc + P["sg_l"]/2,
+                 _bc - P["sg_tab"]/2, _bc + P["sg_tab"]/2))
+chk("the two servos do not clash", _sgb[1][0] > _sgb[0][1],
+    f"gap {_sgb[1][0]-_sgb[0][1]:.1f} mm between bodies")
+chk("servo ears stay inside the case",
+    all(e0 >= WL and e1 <= CW-WL for _,_,e0,e1 in _sgb),
+    "  ".join(f"slot{_i} ears {e0:.1f}..{e1:.1f}"
+              for _i,(_,_,e0,e1) in enumerate(_sgb)))
+chk("shaft offset is modelled, not assumed centred", P["sg_shaft"] != P["sg_l"]/2,
+    f"shaft {P['sg_shaft']:.1f} from the near end of a {P['sg_l']:.1f} body")
 chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-WL-2:.1f}")
 # ── how far can an extended drawer droop? ──
 _ceil   = CH - WL                      # bay ceiling, assembly Z
