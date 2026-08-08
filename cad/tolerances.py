@@ -21,9 +21,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # mirror cad/nano.py — kept explicit so this file is readable on its own
 P = dict(cw=92.0, cd=66.0, ch=53.0, wall=2.0, deck_z=25.5, deck_t=2.5,
          dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
-         side_clear=1.2, mid_gap=2.0, module=1.25, teeth=12,
+         side_clear=1.2, mid_gap=6.0, module=1.25, teeth=16,
          gear_t=5.0, backlash=0.30, fin_t=3.0, fin_h=8.0,
-         sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_spline=4.8, clear=0.35,
+         sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8, clear=0.35,
          gap=0.8, peg=3.0)
 M = P["module"]
 TOOTH_H  = 2.25*M
@@ -57,7 +57,7 @@ def val(name, actual, lo, hi, kind, note=""):
                  kind, v, note))
 
 # ── sliding joints ────────────────────────────────────────────────────
-fit("drawer in case, width", 2*41.8 + P["mid_gap"],
+fit("drawer in case, width", 2*39.8 + P["mid_gap"],
     P["cw"] - 2*P["wall"], 0.30, 0.60, "running",
     "both drawers across the internal width")
 fit("rack blade in deck slot", FIN_SPAN, FIN_SPAN + 2.4, 0.30, 0.60,
@@ -100,6 +100,14 @@ val("tooth height", TOOTH_H, 4*0.2, 99.0, "printability",
     "layers at 0.2 mm")
 val("rack blade thickness", P["fin_t"], 2.5*NOZZLE, 99.0, "printability",
     "carries the full drive load")
+
+# ── electronics mounts ────────────────────────────────────────────────
+fit("ESP32-WROOM-32D in its channel", 27.9, 28.6, 0.25, 0.60, "location",
+    "DevKitC has no mounting holes - held by the walls")
+fit("servo body in its cradle", P["sg_l"], P["sg_l"]+2*P["clear"],
+    0.25, 0.45, "location", "SG90 drops in from above")
+val("servo cradle spans the tab pitch", P["sg_tab"]+4.0, P["sg_tab"], 99.0,
+    "assembly", "screw holes must land ON the cradle, not past it")
 
 # ── fasteners and walls ───────────────────────────────────────────────
 val("M2 self-tap pilot", 1.70, 1.60, 1.75, "thread", "servo tabs")
