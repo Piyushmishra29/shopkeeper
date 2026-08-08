@@ -550,7 +550,7 @@ BED=256.0
 # nothing. Swap the spool between the two prints.
 PLATES=[("1_white",  "#F2F2F2FF", [("case_lower",1),("case_upper",1)]),
         ("2_yellow", "#F2B705FF", [("deck",1),("drawer",2),("rack",2),
-                                   ("pinion",2)] +
+                                   ("pinion",2),("logo_inlay",1)] +
                                   ([("knob",2)] if P["pull"]=="knob" else []))]
 
 def pack(items):
