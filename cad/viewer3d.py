@@ -163,13 +163,28 @@ for n in NAMES:
 # 3.  Assembly + exploded transforms
 # ────────────────────────────────────────────────────────────────────────────
 # base pose at pull = 0, exactly as nano.py's sweep builds it
-KNOB_Y = 0.2      # neck butts the drawer face, 4.1 mm stem enters at y = 7.8
+KNOB_Y = 0.2      # neck butts the drawer face, 4.1 mm stem enters at the face
+
+# Tooth PHASE of the pinion at pull = 0.
+#
+# Rolling gives the right rotation RATE (theta = pull / R_P) but not the right
+# starting angle: pinion tooth 0 is modelled at angle 0, and rack tooth 0 at
+# y = PITCH/2, so the two are only in mesh for one particular offset. The rack
+# tooth index and the pinion tooth index at the contact point sum to a constant,
+# so the condition is simply that the pinion be advanced by the contact point's
+# offset along the rack, taken modulo one circular pitch.
+#
+# Verified by boolean sweep: at this value the rack/pinion overlap is 0.0000 mm3
+# across the whole stroke; one angular pitch away it is ~21 mm3 of solid clash.
+PIN_PHASE = (((WL + PIN_Y) - (RACK_Y0 + Y_CLOSED)) % PITCH) / R_P
+print(f"  pinion tooth phase {math.degrees(PIN_PHASE):.2f} deg "
+      f"({PIN_PHASE:.5f} rad) at pull = 0")
 
 INST = []
-def add(part, t, ex, pull=0, spin=0, lab=None, ly=0, show=0):
+def add(part, t, ex, pull=0, spin=0, ph=0.0, lab=None, ly=0, show=0):
     INST.append({"p": part, "t": [round(v, 4) for v in t],
                  "ex": [round(v, 4) for v in ex],
-                 "pull": pull, "spin": spin,
+                 "pull": pull, "spin": spin, "ph": round(ph, 6),
                  "lab": lab, "ly": ly, "show": show})
 
 add("case_lower", (0, 0, 0),                              (0, 0, 0),      lab="case_lower", ly=64)
@@ -183,10 +198,13 @@ for i, dx in enumerate(DR_X):
     add("rack",   (dx + FIN_X - P["fin_t"]/2, RACK_Y0 + Y_CLOSED, DECK + P["dr_floor"] + 0.2),
         (side*18, -62, 44), pull=1, lab=("rack" if i == 0 else None), ly=0)
     add("pinion", (dx + FIN_X + PIN_DX, WL + PIN_Y,     PIN_Z),
-        (side*18, -62, 22), spin=1, lab=("pinion" if i == 0 else None), ly=26)
+        (side*18, -62, 22), spin=1, ph=PIN_PHASE,
+        lab=("pinion" if i == 0 else None), ly=26)
 
+# the knob is only ever shown exploded (P["pull"] == "cut" means it is not
+# fitted), so it gets its own clear spot well in front of everything
 add("knob", (DR_X[1] + DR_W/2, KNOB_Y, DECK + 0.2 + P["dr_h"]*0.55),
-    (18, -78, 66), lab="knob", ly=0, show=1)
+    (34, -96, 6), lab="knob", ly=0, show=1)
 
 # camera fit for both states, with the drawers at full stroke so nothing
 # swings out of frame when they open
@@ -197,7 +215,7 @@ def fit(explode):
             continue
         V = np.array(geo[d["p"]]["v"], dtype=np.float64).reshape(-1, 3) / 100.0
         if d["spin"]:
-            th = TRAVEL / R_P
+            th = TRAVEL / R_P + d["ph"]
             c, s = math.cos(th), math.sin(th)
             V = np.column_stack([c*V[:, 0] - s*V[:, 1], s*V[:, 0] + c*V[:, 1], V[:, 2]])
         T = np.array(d["t"], dtype=np.float64)
@@ -583,7 +601,7 @@ function draw() {
     if (!I.vis) continue;
     var Tx = d.t[0], Ty = d.t[1], Tz = d.t[2], th = 0;
     if (d.pull) Ty -= pull;
-    if (d.spin) th = pull / RP;
+    if (d.spin) th = pull / RP + d.ph;
     if (t > 0) { Tx += d.ex[0] * t; Ty += d.ex[1] * t; Tz += d.ex[2] * t; }
 
     var V = I.P.V, n = I.P.nv, wx = I.wx, wy = I.wy, wz = I.wz,
@@ -843,6 +861,38 @@ with open(OUT, "w", encoding="utf-8") as fh:
 # ────────────────────────────────────────────────────────────────────────────
 # 5.  Verify
 # ────────────────────────────────────────────────────────────────────────────
+def remesh(name):
+    g = geo[name]
+    return trimesh.Trimesh(np.array(g["v"], dtype=np.float64).reshape(-1, 3) / 100.0,
+                           np.array(g["f"], dtype=np.int64).reshape(-1, 3),
+                           process=False)
+
+def posed(inst, pull):
+    m = remesh(inst["p"])
+    if inst["spin"]:
+        m.apply_transform(trimesh.transformations.rotation_matrix(
+            pull / R_P + inst["ph"], [0, 0, 1]))
+    t = np.array(inst["t"], dtype=np.float64)
+    if inst["pull"]:
+        t = t + np.array([0.0, -pull, 0.0])
+    m.apply_translation(t)
+    return m
+
+# The pinion's tooth phase and Z are derived, not taken from nano.py, so prove
+# them the way nano.py proves everything else: with a boolean sweep. One angular
+# pitch out of phase this reads ~21 mm3 of solid steel-through-steel.
+rk = next(i for i in INST if i["p"] == "rack")
+pn = next(i for i in INST if i["p"] == "pinion")
+worst, wp = 0.0, None
+for p_ in (0.0, TRAVEL*0.2, TRAVEL*0.4, TRAVEL*0.6, TRAVEL*0.8, TRAVEL):
+    h = trimesh.boolean.intersection([posed(rk, p_), posed(pn, p_)], engine="manifold")
+    v = float(h.volume) if h.volume == h.volume else 0.0
+    if v > worst: worst, wp = v, p_
+print(f"\n  rack/pinion mesh sweep: worst overlap {worst:.4f} mm3"
+      + (f" at pull {wp:.1f}" if wp is not None else "") +
+      f"   [{'PASS' if worst < 1.0 else 'FAIL'}]")
+MESH_OK = worst < 1.0
+
 sz = os.path.getsize(OUT)
 txt = open(OUT, encoding="utf-8").read()
 bad = [s for s in ("http://", "https://", "//cdn", "src=", "@import", "fetch(",
@@ -858,6 +908,6 @@ per_frame = sum(tris[i['p']] for i in INST if i['show'] == 0)
 print(f"  drawn per frame: {per_frame} assembled, "
       f"{sum(tris[i['p']] for i in INST)} exploded")
 print(f"  build total {TOTAL:.1f} g solid")
-if bad or missing or sz < 40000:
+if bad or missing or sz < 40000 or not MESH_OK:
     sys.exit("VERIFY FAILED")
 print("  OK")

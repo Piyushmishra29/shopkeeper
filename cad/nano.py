@@ -102,12 +102,16 @@ def pinion():
     # 0.75 mm apart, far under what a 0.4 nozzle resolves, so it just reams
     # itself round and slips. The horn is screwed to the spline by the servo's
     # own M2.5, and the pinion then bolts to the horn.
-    m=diff(m,cyl_z(8.4,-1,2.6,0,0))                      # horn boss recess
-    m=diff(m,blk(-2.9,2.9,-8.0,8.0,-1,1.9))              # double-arm horn slot
-    m=diff(m,cyl_z(4.6,-1,P["gear_t"]+6,0,0))            # driver access to the M2.5
-    for ang in (0.0,math.pi):                            # 2 x M2 into the horn
-        m=diff(m,cyl_z(1.9,-1,P["gear_t"]+6,
-                       6.0*math.cos(ang),6.0*math.sin(ang)))
+    # The ARM SLOT is the drive - a keyed joint, not friction and not screws.
+    # At a 15 mm pitch diameter there is no room for a screw that clears the
+    # tooth roots (r 5.94), so screws were dropped. The arm bears on the slot
+    # walls: ~0.7 MPa against PETG's ~50, so the margin is enormous.
+    #
+    # A real SG90 double-arm horn is 7.0 mm wide at the boss and 4.6 at the tip,
+    # 1.5-1.6 thick, 17.5 long each side. Slot is sized for the WIDEST point.
+    m=diff(m,cyl_z(8.6,-1,2.7,0,0))                      # horn boss recess
+    m=diff(m,blk(-3.8,3.8,-8.0,8.0,-1,2.1))              # arm slot, 7.6 x 16 x 2.1
+    m=diff(m,cyl_z(4.6,-1,P["gear_t"]+6,0,0))            # driver reaches the M2.5
     return m
 
 def rack_fin(length,h=None):
