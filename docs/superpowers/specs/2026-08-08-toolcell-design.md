@@ -91,39 +91,85 @@ loads land in the printed guide walls and never reach the servo). That path is d
 
 ## 3. Physical design
 
-### 3.1 Overall
+### 3.1 Host body
+
+v1 is built into an existing MakerWorld model — *Ryobi Mini Desktop Toolbox* (model 1105895, a remix
+of a DeWALT chest) — rather than a bespoke frame. It gives the multi-drawer cabinet silhouette that
+makes the pitch legible: *"this is one drawer of a cabinet, the others work the same way."*
+
+**Geometry measured directly from the supplied STLs**, not from the listing:
+
+| | Large drawer | Small drawer |
+|---|---|---|
+| Bay shell | 189.6 × 119.5 × **55** | 189.6 × 119.5 × **30** |
+| Drawer body | 105 × 189.6 × 55 | 105 × 189.6 × 30 |
+| **Internal cavity** | **172.6 W × 91 D × ~52 H** | **172.6 W × 91 D × ~27 H** |
+| Side wall | 3.0 mm | 3.0 mm |
+| Front face | 8.0 mm | 8.5 mm |
+
+Full assembly is 200 × 208 × 110 mm. The chest is **modular stacked bays**, so a partial build is
+possible: 2 × large bay + 2 × small bay + 4 side rails (200 × 10 × 10) + 4 feet + 4 handle covers.
+
+**The 52 mm large-drawer cavity is the deciding measurement.** The SG90 needs 32.6 mm across its
+tabs, so it stands upright as specced in §3.2 with room to spare. An earlier working assumption of a
+36 mm drawer would have forced the servo onto its side; that is not required and is superseded.
+
+### 3.2 Cell layout
+
+Both live cells go in **one large drawer**. The small drawers become dummies — 27 mm is too shallow
+for an upright servo.
+
+Servos sit in a **shared central spine** rather than one at each outer edge, offset front-to-back
+from each other with shafts pointing opposite ways. This recovers 33 mm of usable bin width.
+
+```
+|<-- 69 flap -->|<- 33 spine ->|<-- 69 flap -->|     172.6 mm
+       CELL A      2× SG90          CELL B
+```
 
 | | |
 |---|---|
-| Frame | 286 × 286 × 55 mm, printed in sections |
-| Compartment pitch | 140 × 140 mm |
-| Bin clear volume | 98 × 128 × 45 mm |
-| Flap | 100 × 132 × 3 mm |
-| Live cells | A1, A2 (front row) |
-| Dummy cells | B1, B2 (back row) |
+| Bin clear volume | 69 × 85 × 42 mm |
+| Flap | 69 × 88 × 3 mm |
+| Flap mass | ~19 g |
+| Live cells | A1, A2 — one large drawer |
+| Dummy cells | 2 small drawers, empty shells |
 | Material | PETG, 4 perimeters, 40% infill |
 | Colour | dark grey or black body, yellow flaps on live cells |
 
 Yellow flaps on the live cells are intentional: they read as a designed accent, reinforce the
 pick-to-light idea, and stop the object looking like a 3D-printing experiment.
 
-### 3.2 Hinge rail — the critical part
+### 3.3 Branding
 
-Each live cell has a **single printed hinge rail**, 146 mm long, carrying both the servo mount and
-the idler bearing. It must be printed as one part so both features come off the same print and stay
-collinear.
+`obj_1_Ryobi badge.stl` is a **separate part — do not print it.** The front has a plain cutout
+without it. Check whether the top bay carries an etched wordmark; if so, delete or sand it. Shipping
+a demonstrator carrying another manufacturer's marks is both a taste problem in front of a buyer and
+a trademark problem if this is ever sold.
 
-**Left end — drive.** The SG90 lies on its side with its output shaft pointing along the hinge axis,
-in an **open-topped pocket** so it prints without supports and can be swapped in seconds. Two M2×8
-self-tappers pass through the servo's mounting tabs into printed Ø1.6 pilot bosses.
+### 3.4 Hinge carrier — the critical part
 
-**Right end — idler.** A Ø4 stub axle printed on the flap runs in a Ø4.2 blind bore in a local boss
-on the divider wall. The servo drives; the idler carries the bending load.
+Because both cells sit side by side, **both flaps share one hinge axis** running the full width of
+the drawer along its back edge. That allows the whole hinge assembly to be **a single printed part**:
+a carrier bar 172.6 mm long × ~35 mm deep × ~34 mm tall, dropped in against the drawer's back wall,
+with the hinge axis at z ≈ 44 mm above the drawer floor.
+
+Printing it as one part is not a preference — it is what guarantees all four bearing features come
+off the same print and stay collinear.
+
+**Centre (x 70–103) — the spine.** Two SG90s stand **upright**, tabs vertical, in open-topped
+pockets so the part prints without supports and a servo can be swapped in seconds. Shafts point in
+**opposite directions** along the hinge axis. Their bodies overlap in X, so they are offset in Y:
+servo 1 at y 5–17.5, servo 2 at y 20–32.5. Each needs only 12.5 mm of drawer depth. Two M2×8
+self-tappers per servo pass through the mounting tabs into printed Ø1.6 pilot bosses.
+
+**Outer ends (x ≈ 2 and x ≈ 170) — idlers.** A Ø4 stub axle printed on each flap runs in a Ø4.2
+blind bore. The servo drives one end; the idler carries the bending load.
 
 **Coupling.** The single-arm horn from the servo bag mounts on the spline and screws to a 3 mm
 printed drive arm on the flap, using the horn holes at r = 11 mm and r = 16 mm with 2 × M2×6.
 
-### 3.3 SG90 reference dimensions
+### 3.5 SG90 reference dimensions
 
 | Feature | Value |
 |---|---|
@@ -137,7 +183,7 @@ printed drive arm on the flap, using the horn holes at r = 11 mm and r = 16 mm w
 | Stall torque | 1.8 kg·cm @ 4.8 V |
 | Stall current | ~700 mA |
 
-### 3.4 Print tolerances
+### 3.6 Print tolerances
 
 | Feature | Nominal | Model at | Reason |
 |---|---|---|---|
@@ -148,25 +194,35 @@ printed drive arm on the flap, using the horn holes at r = 11 mm and r = 16 mm w
 | Stub axle / bore | Ø4 | **4.0 / 4.35** | loose running fit; a tight one binds the servo |
 | Flap-to-wall gap | — | **0.6 all round** | printed flaps warp slightly |
 
-### 3.5 Load check
+### 3.7 Load check
 
-Flap mass ≈ 25 g, centre of mass ≈ 62 mm from the hinge (half of 132 mm depth, allowing for the
-drive arm). Required torque ≈ 0.025 kg × 6.2 cm ≈ **0.16 kg·cm**; with the drive arm and screws call
-it **0.31 kg·cm**. Against 1.8 kg·cm available this is a **5.8× margin**, which is why the flap can
-be driven slowly and quietly.
+Flap is 69 × 88 × 3 mm PETG ≈ 16 g, ≈ 18 g with the drive arm and screws. Centre of mass ≈ 44 mm
+from the hinge. Required torque ≈ 0.018 kg × 4.4 cm ≈ **0.08 kg·cm**; call it **0.15 kg·cm** with
+hardware and friction. Against 1.8 kg·cm available that is a **12× margin** — comfortably enough to
+drive the flap slowly and silently, and enough headroom that a warped flap rubbing slightly will
+still open rather than stall.
 
-### 3.6 The failure mode to design against
+### 3.8 The failure mode to design against
 
-If the servo shaft axis and the Ø4.2 idler bore are not collinear, the flap binds and the SG90
-stalls at 700 mA until something gives.
+If a servo shaft axis and its Ø4.2 idler bore are not collinear, that flap binds and the SG90 stalls
+at 700 mA until something gives.
 
-**Acceptance test:** with the servo unplugged and the horn detached, the flap must fall closed under
+**Acceptance test:** with the servo unplugged and the horn detached, each flap must fall closed under
 its own weight. If it does not, ream the bore before applying power.
 
-### 3.7 Servo travel
+### 3.9 Servo travel and the open-drawer interlock
 
-**70° only.** Do not command the full 0–180° range; the flap will strike the rear divider. Software
-must clamp travel.
+**70° only.** Do not command the full 0–180° range. Software must clamp travel.
+
+**The drawer must be fully extended before any flap opens.** The flap swings up and back over the
+hinge carrier; with the drawer pushed in, the bay above it is in the way. This is not a defect —
+ZOLLER's cabinets work the same way, releasing one drawer at a time and committing the transaction
+on drawer close.
+
+For v1 the kiosk simply instructs the operator to pull the drawer out first, and the flap will not
+release until they confirm. **A drawer-position switch is the correct fix and is a ₹30 part**; add it
+before any customer touches the unit, because an operator who opens a flap into a closed bay will
+strip a servo on the first try.
 
 ---
 
@@ -186,11 +242,13 @@ Everything except filament and fasteners is already on hand.
 | LED + 220 Ω resistor | 2 | on hand |
 | 5 V 3 A supply | 1 | on hand |
 | 1000 µF electrolytic | 1 | on hand |
-| M2×8 self-tap, M2×6 machine screws | 4 + 4 | buy, ~₹100 |
-| PETG filament | ~250 g | ~₹200 |
+| M2×8 self-tap, M2×6 machine screws | 4 + 8 | buy, ~₹100 |
+| Microswitch, drawer-position interlock | 1 | buy, ~₹30 |
+| PETG filament, full chest | ~700 g | ~₹550 |
 | MG90S metal-gear servos (spares) | 4 | buy, ~₹1,000 |
 
-**Out-of-pocket cost of the demonstrator: about ₹1,300, most of it spare servos.**
+**Out-of-pocket cost of the demonstrator: about ₹1,700, most of it spare servos and filament.**
+Phase 2 alone needs only ~250 g of filament.
 
 ### 4.2 Pin assignment (ESP32-S3)
 
@@ -202,6 +260,7 @@ Everything except filament and fasteners is already on hand.
 | Keypad rows | 8, 9, 10, 11 |
 | Keypad columns | 12, 13, 14, 21 |
 | I²C SDA / SCL (LCD) | 17 / 18 |
+| Drawer-position switch | 3 (input, pull-up) |
 
 Avoid GPIO 19–20 (USB) and 26–37 (flash/PSRAM on S3 modules).
 
@@ -341,15 +400,16 @@ are used rather than keeping one as a spare.
 | Phase | Work | Estimate |
 |---|---|---|
 | 1 | Bench rig: servo, keypad, LCD, IR on a breadboard. **Verify 3.3 V PWM drives the SG90.** | 1 evening |
-| 2 | Print and fit the hinge rail. Tune tolerances. Pass the falls-shut-unpowered test. | 2 evenings |
+| 2 | Print `obj_11` (one large bay), `obj_25` (large drawer), `obj_9` (its front), 4 rails, 4 feet. Fit the hinge carrier. Tune tolerances. Pass the falls-shut-unpowered test. | 2 evenings |
 | 3 | Firmware: state machine, config loading, logging, HTTP API. | 1 weekend |
 | 4 | Kiosk UI, served from LittleFS. | 1 weekend |
-| 5 | Print the frame and dummies, cable management, final assembly. | 1 weekend |
+| 5 | Print the remaining bays and dummy drawers, cable management, final assembly. | 1 weekend |
 
 Roughly **three weekends** to a demonstrable unit.
 
-Phase 2 is the risk. Budget for three iterations of the hinge rail; the collinearity is the hard
-part and no amount of care in CAD substitutes for measuring the printed part.
+Phase 2 is the risk. Budget for three iterations of the hinge carrier; the collinearity is the hard
+part and no amount of care in CAD substitutes for measuring the printed part. **Do not print the
+remaining three bays until the mechanism works** — that is how a weekend disappears.
 
 ---
 
