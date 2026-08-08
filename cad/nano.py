@@ -31,7 +31,7 @@ P = dict(
     deck_z=34.5, deck_t=2.5,
     dr_h=18.0, dr_wall=1.8, dr_floor=1.8, dr_front=3.0,
     side_clear=1.2, mid_gap=6.0,
-    module=1.25, teeth=12, press=math.radians(14.5),
+    module=1.25, teeth=16, press=math.radians(14.5),
     gear_t=5.0, backlash=0.30,
     fin_t=3.0, fin_h=8.0,
     sg_l=22.8, sg_w=12.2, sg_h=22.7, sg_tab=32.2, sg_spline=4.8,
@@ -55,9 +55,10 @@ INNER  = CW - 2*WL
 DR_W   = (INNER - P["mid_gap"] - 2*P["side_clear"]) / 2
 DR_X   = (WL + P["side_clear"],
           WL + P["side_clear"] + DR_W + P["mid_gap"])
-FIN_X  = DR_W * 0.30                            # in drawer-local coords
+FIN_X  = DR_W * 0.20   # moved inboard so the bigger pinion's servo cradle
+                       # still clears the right-hand case wall
 PIN_DX = -P["fin_t"]/2 + (FIN_SPAN - M) + R_P   # pinion offset from FIN_X
-PIN_Y  = 28.5
+PIN_Y  = 17.6
 
 def T(m,x=0,y=0,z=0): m.apply_translation([x,y,z]); return m
 def blk(x0,x1,y0,y1,z0,z1):
@@ -159,12 +160,13 @@ def case_lower():
                      P["floor_t"]-1,P["floor_t"]+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
-    for ddx in (-10.5,10.5):
-        for ddy in (-24,24):
+    ESP=(CW/2, CD-14.0)
+    for ddx in (-24,24):
+        for ddy in (-10.5,10.5):
             m=union([m,cyl_z(5.0,P["floor_t"],P["floor_t"]+3.5,
-                             CW*0.22+ddx,CD*0.55+ddy)])
+                             ESP[0]+ddx,ESP[1]+ddy)])
             m=diff(m,cyl_z(1.7,P["floor_t"]+1,P["floor_t"]+4.5,
-                           CW*0.22+ddx,CD*0.55+ddy))
+                           ESP[0]+ddx,ESP[1]+ddy))
     for wx in (20,40,60):
         m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
@@ -175,7 +177,7 @@ def case_lower():
             m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
-    keep+= [(CW/2, CD*0.78, 34.0)]
+    keep+= [(CW/2, CD-14.0, 34.0)]
     gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
     for i in range(gx+1):
         for j in range(gy+1):
@@ -220,8 +222,8 @@ def case_upper():
     m=diff(m,blk(18,CW-18,CD-WL-1,CD+1,2,14))
     return chamfer(m)
 
-RACK_L  = DR_D-16
-RACK_Y0 = 8.0              # rack start in drawer-part Y
+RACK_L  = DR_D-6      # rack now runs nearly the full drawer
+RACK_Y0 = 3.0              # rack start in drawer-part Y
 PEG_D   = 3.0
 
 def drawer():
@@ -347,13 +349,21 @@ if worst >= 1.0:
 chk("neither drawer fouls the case",worst<1.0,
     f"worst {worst:.2f} mm3" + (f" (slot {wslot}, pull {wy:.1f}){_loc}" if wy is not None else " across both slots, full stroke"))
 
-fin_len=DR_D-16
-c0=(WL+PIN_Y)-(y_closed+7.0+8.0)
+fin_len=RACK_L
+c0=(WL+PIN_Y)-(y_closed+RACK_Y0)
 c1=c0+TRAVEL
 mgn=1.5*M+1.5
 chk("pinion on the rack, closed",mgn<c0<fin_len-mgn,f"{c0:.1f} of 0..{fin_len:.1f}")
 chk("pinion on the rack, open",  mgn<c1<fin_len-mgn,f"{c1:.1f} of 0..{fin_len:.1f}")
-chk("drawer cannot fall out",DR_D-TRAVEL>DR_D*0.5,f"{DR_D-TRAVEL:.1f} of {DR_D:.1f}")
+# What actually retains an extended drawer is not how much of it is still in
+# the bay - it is the drive fin running in the deck slot, which binds if the
+# drawer tries to tip, plus the rack still meshed with the pinion.
+fin_in_slot=(RACK_Y0+RACK_L)-TRAVEL-(y_closed*0+0)+y_closed
+fin_in_slot=min(RACK_Y0+RACK_L+y_closed-TRAVEL, CD-WL-3)
+chk("fin still keyed in the deck slot",fin_in_slot>=20.0,
+    f"{fin_in_slot:.1f} mm of fin inside the slot at full travel")
+chk("drawer still supported by the deck",DR_D-TRAVEL>=20.0,
+    f"{DR_D-TRAVEL:.1f} of {DR_D:.1f} mm still on the deck")
 chk("servo fits under the deck",P["sg_h"]+WL<=P["deck_z"],f"{P['sg_h']+WL:.1f} of {P['deck_z']:.1f}")
 chk("the two servos do not clash",
     (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),

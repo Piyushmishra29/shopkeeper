@@ -29,17 +29,17 @@ MID_GAP  = 6.0
 DR_D     = CD - WL - 9.0
 DR_W     = (CW - 2*WL - MID_GAP - 2*SC) / 2
 DR_X     = (WL + SC, WL + SC + DR_W + MID_GAP)
-M, TEETH = 1.25, 12
+M, TEETH = 1.25, 16
 R_P      = M*TEETH/2
 TRAVEL   = math.pi*R_P
 FIN_T, FIN_H = 3.0, 8.0
 TOOTH_H  = 2.25*M
 FIN_SPAN = FIN_T + TOOTH_H
-FIN_X    = DR_W*0.30
+FIN_X    = DR_W*0.20
 PIN_DX   = -FIN_T/2 + (FIN_SPAN - M) + R_P
-PIN_Y    = 28.5
+PIN_Y    = 17.6
 DR_FLOOR = 1.8
-RACK_Y0  = 8.0
+RACK_Y0  = 3.0
 SG_L, SG_W, SG_H, SG_TAB = 22.8, 12.2, 22.7, 32.2
 
 def L(n): return trimesh.load(os.path.join(N, n + ".stl"))
