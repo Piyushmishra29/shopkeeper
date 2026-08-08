@@ -183,6 +183,7 @@ def case_lower():
     # and the case grew backwards to take it: 66 -> 94 deep.
     EX, EY = CW/2, CD - 23.0
     EBW, EBL, EBT = 35.5, 81.5, 1.6   # measured off the real assembly
+    EBX = 2.0                          # slack each end so it drops in, not wedges
     FT = P["floor_t"]
     for sgn in (-1, 1):
         yy = EY + sgn*(EBW/2 + 1.5)
@@ -192,7 +193,7 @@ def case_lower():
         #   +Y wall  ->  pegs, they enter the FEMALE sockets
         #   -Y wall  ->  notches, they receive the MALE dovetails
         # Insert with the female side facing the rear wall.
-        m=union([m,blk(EX-EBL/2-1.5, EX+EBL/2+1.5, yy-1.5, yy+1.5, FT, FT+6.5)])
+        m=union([m,blk(EX-EBL/2-EBX-1.5, EX+EBL/2+EBX+1.5, yy-1.5, yy+1.5, FT, FT+6.5)])
         for sx0 in (13.5, 67.5):
             px_ = EX - EBL/2 + sx0
             if sgn > 0:
@@ -202,7 +203,9 @@ def case_lower():
                 m=diff(m,blk(px_-2.0, px_+2.0, yy-1.6, yy+1.6,
                              FT+0.6, FT+5.4))
     # end stop at the front, open at the rear so the USB-C is reachable
-    m=union([m,blk(EX-EBL/2-1.0, EX-EBL/2+1.0, EY-EBW/2-1.4, EY+EBW/2+1.4,
+    # End stop sits OUTSIDE the board envelope. It was at EX-EBL/2 from when the
+    # board was 63 long; at 81.5 that put a 1.5mm rib inside the bay.
+    m=union([m,blk(EX-EBL/2-EBX-1.6, EX-EBL/2-EBX, EY-EBW/2-1.4, EY+EBW/2+1.4,
                    FT, FT+5.2)])
 
     # No breadboard. A half-size board plus a 55 x 28 DevKit plus two servos
