@@ -130,6 +130,18 @@ def rack_fin(length,h=None):
             [(t,yc-rt),(t+TOOTH_H,yc-tip),(t+TOOTH_H,yc+tip),(t,yc+rt)]),h))
     return union([base]+tt)
 
+def prism_y(pts_xz,y0,y1):
+    """Extrude a profile given as (x,z) points along the Y axis."""
+    m=extrude_polygon(Polygon(pts_xz),y1-y0)
+    m.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[1,0,0]))
+    m.apply_translation([0,y1,0]); return m
+
+def prism_x(pts_yz,x0,x1):
+    m=extrude_polygon(Polygon(pts_yz),x1-x0)
+    m.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[1,0,0]))
+    m.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[0,0,1]))
+    m.apply_translation([x0,0,0]); return m   # x0: the prism grows +X from here
+
 LEDGE=1.5
 
 def case_lower():
@@ -139,12 +151,14 @@ def case_lower():
     servo cradles and the ESP32 posts, and every gram there is print time."""
     H=DECK; FT=P["floor_t"]
     m=diff(blk(0,CW,0,CD,0,H), blk(WL,CW-WL,WL,CD-WL,FT,H+1))
-    # ledge the deck drops onto
-    m=union([m,blk(WL,CW-WL,WL,CD-WL,H-P["deck_t"]-LEDGE,H-P["deck_t"])])
-    # NO front rail: it sat directly in the path of both drive fins. The deck
-    # rests on the two sides and the rear, which is plenty for a 2.5 mm plate.
-    m=diff(m,blk(WL+LEDGE,CW-WL-LEDGE,WL-1,CD-WL-LEDGE,
-                 H-P["deck_t"]-LEDGE-1,H+1))
+    # Deck ledge as a 45 deg gusset rather than a square shelf: a flat shelf
+    # underside is unsupported, a 45 deg one prints itself. Seat stays at
+    # H-deck_t. No front rail - it sat in the path of both drive fins.
+    zt=H-P["deck_t"]
+    m=union([m,prism_y([(WL,zt),(WL+LEDGE,zt),(WL,zt-LEDGE)],WL,CD-WL)])
+    m=union([m,prism_y([(CW-WL,zt),(CW-WL-LEDGE,zt),(CW-WL,zt-LEDGE)],WL,CD-WL)])
+    m=union([m,prism_x([(CD-WL,zt),(CD-WL-LEDGE,zt),(CD-WL,zt-LEDGE)],
+                       WL,CW-WL)])
     for dx in DR_X:
         sx=dx+FIN_X
         # the fin must pass through the FRONT WALL as well as the deck
@@ -160,33 +174,27 @@ def case_lower():
                      P["floor_t"]-1,P["floor_t"]+14))
         for tx in (-P["sg_tab"]/2+2.2,P["sg_tab"]/2-2.2):
             m=diff(m,cyl_z(1.7,P["floor_t"],P["floor_t"]+13,px+tx,WL+PIN_Y))
-    # ── ESP32-S3 cradle: slide-in rails with a retaining lip ──
-    # 63 x 25.5 board. Rails grip the long edges so it drops in and stays put
-    # with no screws; the USB-C end faces the rear window so it can be
-    # reflashed with the case shut.
-    EX, EY = CW/2, CD - 16.0
-    EBW, EBL, EBT = 25.5, 63.0, 1.6
+    # ── ESP32-WROOM-32D DevKit cradle ──
+    # Board is 54.4 x 27.9 x 1.6. These DevKitC/NodeMCU boards have no
+    # mounting holes at all, so it is a channel, not posts: it drops between
+    # two walls and a dab of glue holds it. Micro-USB end faces the rear
+    # window so it can be reflashed with the case shut.
+    EX, EY = CW/2, CD - 20.0   # 20 not 16: the wider board's wall broke the rear face
+    EBW, EBL, EBT = 28.6, 55.4, 1.6
     FT = P["floor_t"]
     for sgn in (-1, 1):
         yy = EY + sgn*(EBW/2 + 1.4)
-        m=union([m,blk(EX-EBL/2-1.0, EX+EBL/2+1.0, yy-1.4, yy+1.4, FT, FT+5.2)])
-        # undercut so the board slides under a lip instead of needing screws
-        m=diff(m,blk(EX-EBL/2-1.5, EX+EBL/2+1.5,
-                     yy-1.5*sgn, yy+2.0*sgn, FT+2.4, FT+2.4+EBT+0.4))
+        # plain channel walls, no undercut lip. The lip's underside was 255 mm2
+        # of unsupported area on its own; the board is held by the walls and a
+        # dab of glue, which is all a demo needs.
+        m=union([m,blk(EX-EBL/2-1.0, EX+EBL/2+1.0, yy-1.4, yy+1.4, FT, FT+4.0)])
     # end stop at the front, open at the rear so the USB-C is reachable
     m=union([m,blk(EX-EBL/2-1.0, EX-EBL/2+1.0, EY-EBW/2-1.4, EY+EBW/2+1.4,
                    FT, FT+5.2)])
 
-    # ── half-size breadboard slot, 82 x 55 mm, for the servo wiring ──
-    # Sits over the ESP cradle on four pillars; the board's adhesive back
-    # sticks to the pillar tops.
-    BBX, BBY = CW/2, CD - 16.0
-    for ddx in (-33.0, 33.0):
-        for ddy in (-19.0, 19.0):
-            px_, py_ = BBX+ddx, BBY+ddy
-            if py_ > CD - WL - 3: continue
-            m=union([m,cyl_z(6.0, FT, FT+12.0, px_, py_)])
-            m=diff(m,cyl_z(1.7, FT+2, FT+13.0, px_, py_))
+    # No breadboard. A half-size board plus a 55 x 28 DevKit plus two servos
+    # does not fit a 92 x 66 case - the pillars landed on both servos. The
+    # DevKit's own headers take dupont leads directly.
     for wx in (20,40,60):
         m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
@@ -197,7 +205,7 @@ def case_lower():
             m=diff(m,cyl_x(5.0,CW-WL-1,CW+1,CD*yy,z))
     # lightening holes, skipping anything mounted to the floor
     keep=[(dx+FIN_X+PIN_DX, WL+PIN_Y, 21.0) for dx in DR_X]
-    keep+= [(CW/2, CD-16.0, 40.0)]
+    keep+= [(CW/2, CD-20.0, 40.0)]
     gx=int((CW-2*WL-14)//13); gy=int((CD-2*WL-14)//13)
     for i in range(gx+1):
         for j in range(gy+1):

@@ -22,7 +22,10 @@ def land(m):
 
 FLIP = {"case_upper.stl"}      # printed top-face-down; score it that way
 
-def analyse(path, cos_limit=-0.70, min_h=0.6):
+# 45 deg is the accepted self-supporting limit and has normal_z = -0.7071,
+# so a -0.70 threshold flags every deliberate 45 deg chamfer. -0.75 leaves
+# 45 deg passing and still catches anything flatter.
+def analyse(path, cos_limit=-0.75, min_h=0.6):
     m = trimesh.load(path)
     if os.path.basename(path) in FLIP:
         m.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1,0,0]))
@@ -75,7 +78,7 @@ for f in sorted(os.listdir(OUT)):
     flag = "OK" if area < 15 else ("MARGINAL" if area < 80 else "*** NEEDS FIXING ***")
     print(f"  {f:14s} {m.extents[0]:6.1f} x {m.extents[1]:6.1f} x {m.extents[2]:5.1f}"
           f"   unsupported {area:8.1f} mm2 ({pct:5.1f}% of footprint)   {flag}")
-    for lo, a, x0, x1, y0, y1 in groups[:4]:
+    for lo, a, x0, x1, y0, y1 in sorted(groups, key=lambda g: -g[1])[:4]:
         print(f"        z {lo:5.1f}-{lo+2:.1f}  {a:7.1f} mm2   "
               f"x {x0:5.1f}..{x1:5.1f}  y {y0:5.1f}..{y1:5.1f}")
 print()
