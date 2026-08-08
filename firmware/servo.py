@@ -43,6 +43,8 @@ class Servo:
         self._us = self.closed_us
         self.is_open = False
         self.busy = False
+        self.cycles = 0            # completed opens, for the maintenance readout
+        self.pos = 0.0             # 0..1 through the stroke, live during a move
         self._detach_task = None
 
     # ── low level ─────────────────────────────────────────────────────────
@@ -80,8 +82,13 @@ class Servo:
             self._write_us(to_us)
             return
         steps = max(8, int(ms / 20))
+        span = self.open_us - self.closed_us
         for i in range(steps + 1):
-            self._write_us(frm + (to_us - frm) * _ease(i / steps))
+            us = frm + (to_us - frm) * _ease(i / steps)
+            self._write_us(us)
+            # live stroke fraction, so the UI can draw the drawer where it
+            # actually is rather than only where it will end up
+            self.pos = 0.0 if span == 0 else (us - self.closed_us) / span
             await asyncio.sleep_ms(int(ms / steps))
 
     async def _settle_then_detach(self):
@@ -98,6 +105,9 @@ class Servo:
             await self._glide(self.open_us if opened else self.closed_us,
                               config.TRAVEL_MS if ms is None else ms)
             self.is_open = opened
+            self.pos = 1.0 if opened else 0.0
+            if opened:
+                self.cycles += 1
         finally:
             self.busy = False
         asyncio.create_task(self._settle_then_detach())
@@ -143,4 +153,8 @@ class Servo:
             "closed_us": self.closed_us, "open_us": self.open_us,
             "travel_mm": round(self.travel_mm, 1),
             "powered": self._pwm is not None,
+            "cycles": self.cycles,
+            "pos": round(self.pos, 3),
+            "us": int(self._us),
+            "deg": round(abs(self.open_us - self.closed_us) / 2000.0 * 180, 1),
         }

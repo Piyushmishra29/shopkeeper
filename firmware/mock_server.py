@@ -39,6 +39,8 @@ class Drawer:
         self.is_open = False
         self.busy = False
         self.powered = False
+        self.cycles = 0
+        self.pos = 0.0
 
     @property
     def travel_mm(self):
@@ -48,7 +50,11 @@ class Drawer:
         return {"id": self.id, "name": self.name, "pin": self.pin,
                 "open": self.is_open, "busy": self.busy,
                 "closed_us": self.closed_us, "open_us": self.open_us,
-                "travel_mm": self.travel_mm, "powered": self.powered}
+                "travel_mm": self.travel_mm, "powered": self.powered,
+                "cycles": self.cycles, "pos": round(self.pos, 3),
+                "us": int(self.closed_us + self.pos *
+                          (self.open_us - self.closed_us)),
+                "deg": round(abs(self.open_us - self.closed_us) / 2000.0 * 180, 1)}
 
     def move(self, opened, log):
         """Same shape as the firmware: returns immediately, finishes later."""
@@ -58,7 +64,17 @@ class Drawer:
         self.powered = True
 
         def run():
-            time.sleep(config.TRAVEL_MS / 1000.0)
+            # step the position so the elevation animates exactly as it does
+            # on the hardware, where pos comes off the servo glide
+            n, t0 = 26, self.pos
+            for i in range(n + 1):
+                f = i / n
+                f = 4*f*f*f if f < .5 else 1 - ((-2*f+2)**3)/2
+                self.pos = t0 + ((1.0 if opened else 0.0) - t0) * f
+                time.sleep(config.TRAVEL_MS / 1000.0 / n)
+            self.pos = 1.0 if opened else 0.0
+            if opened:
+                self.cycles += 1
             self.is_open = opened
             self.busy = False
             log.add("OPENED" if opened else "CLOSED", self.id)
@@ -97,7 +113,11 @@ class Cabinet:
         return time.time() - self.unlocked_at > config.PIN_TIMEOUT_S
 
     def state(self):
-        return {"locked": self.locked, "timeout": config.PIN_TIMEOUT_S,
+        return {"unit": config.UNIT, "fw": config.FW, "site": config.SITE,
+                "net": "AP:" + config.AP_SSID,
+                "locked": self.locked, "timeout": config.PIN_TIMEOUT_S,
+                "left": 0 if self.locked else max(0, config.PIN_TIMEOUT_S -
+                        int(time.time() - self.unlocked_at)),
                 "uptime": int(time.time() - BOOT), "mem": 2029856,
                 "drawers": [dict(d.state(), tools=config.TOOLS.get(d.id, []))
                             for d in self.drawers],

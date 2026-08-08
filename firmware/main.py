@@ -90,6 +90,7 @@ async def _amain():
     log = store.Log()
     log.add("BOOT", None, mode)
     app = App(drawers, log)
+    app.net = mode
 
     await serve(app)
     asyncio.create_task(_housekeeping(app))

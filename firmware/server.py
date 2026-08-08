@@ -31,6 +31,7 @@ class App:
         self.log = log
         self.unlocked_at = 0
         self.boot_at = time.time()
+        self.net = "-"
 
     # ── access ────────────────────────────────────────────────────────────
     @property
@@ -58,8 +59,12 @@ class App:
     # ── state ─────────────────────────────────────────────────────────────
     def state(self):
         return {
+            "unit": config.UNIT, "fw": config.FW, "site": config.SITE,
+            "net": self.net,
             "locked": self.locked,
             "timeout": config.PIN_TIMEOUT_S,
+            "left": 0 if self.locked else
+                    max(0, config.PIN_TIMEOUT_S - int(time.time() - self.unlocked_at)),
             "uptime": time.time() - self.boot_at,
             "mem": gc.mem_free(),
             "drawers": [dict(d.state(), tools=store.tools_for(d.id))

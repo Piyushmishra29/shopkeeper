@@ -2,389 +2,549 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1F2124">
-<title>shopkeeper NANO</title>
+<meta name="theme-color" content="#0B0D0F">
+<title>shopkeeper NANO — tool access control</title>
 <style>
-/* Ommi Forge tokens. Lifted from the brand kit rather than re-picked:
-   saffron and mesh are the forge colours, graphite is the ground, ember is
-   the only one with enough contrast to carry small text on light. */
+/* ═══════════════════════════════════════════════════════════════════════
+   shopkeeper NANO — operator terminal
+
+   Built as a machine HMI, not a web page. The reference points are the
+   screens already bolted to the equipment in this room: dense, hairline-
+   ruled, monospaced, one accent colour reserved for LIVE and nothing else.
+   Ommi Forge saffron is that accent; everything around it stays graphite so
+   that when a drawer is moving, the only warm thing on the screen is the
+   drawer that is moving.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root{
-  --saffron:#FF9933; --mesh:#FF5533; --ember:#C2381C; --peach:#FFBC7D;
-  --graphite:#1F2124; --steel:#54595F; --ash:#7A7A7A; --paper:#FAFAFA;
-  --ink:#141518; --panel:#25272B; --panel2:#2C2F34; --line:#383B41;
-  --ok:#4FBF7B; --warn:#E8B54A;
-  --r:3px;
+  --bg:#0B0D0F; --panel:#121517; --panel2:#171B1E; --sunk:#0E1113;
+  --rule:#22272B; --rule2:#2E353B;
+  --t1:#E6E9EC; --t2:#97A0A8; --t3:#5F686F; --t4:#3E464C;
+  --acc:#FF9933; --acc2:#FF5533; --ember:#C2381C;
+  --ok:#3FB950; --warn:#D29922; --bad:#D24B2E;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --rail:46px; --foot:30px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
+html,body{height:100%;margin:0}
 body{
-  margin:0;background:var(--ink);color:var(--paper);font:15px/1.5 var(--sans);
-  -webkit-font-smoothing:antialiased;overscroll-behavior:none;
-  background-image:
-    linear-gradient(rgba(255,153,51,.028) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,153,51,.028) 1px,transparent 1px);
-  background-size:26px 26px;
+  background:var(--bg);color:var(--t1);
+  font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;overscroll-behavior:none;
 }
-.wrap{max-width:820px;margin:0 auto;padding:18px 16px 40px}
+.mono{font-family:var(--mono)}
+/* every field label on the screen is this: 10px, wide, quiet */
+.lbl{font:500 9.5px/1 var(--mono);letter-spacing:.19em;text-transform:uppercase;
+     color:var(--t3)}
 
-/* ── masthead ─────────────────────────────────────────────────────────── */
-.mast{display:flex;align-items:center;gap:12px;padding:6px 0 16px;
-      border-bottom:1px solid var(--line);margin-bottom:18px}
-.mark{width:30px;height:30px;flex:none}
-.mast h1{margin:0;font-size:1.02rem;font-weight:700;letter-spacing:-.01em}
-.mast h1 span{color:var(--ash);font-weight:400}
-.eyebrow{font-family:var(--mono);font-size:.58rem;letter-spacing:.22em;
-         text-transform:uppercase;color:var(--saffron)}
-.mast .grow{flex:1}
-.pill{font-family:var(--mono);font-size:.6rem;letter-spacing:.13em;
-      text-transform:uppercase;padding:4px 9px;border-radius:100px;
-      border:1px solid var(--line);color:var(--ash);white-space:nowrap}
-.pill.live{color:var(--ok);border-color:rgba(79,191,123,.4)}
-.pill.shut{color:var(--ember);border-color:rgba(194,56,28,.45)}
+/* ── top rail ────────────────────────────────────────────────────────── */
+.rail{position:fixed;inset:0 0 auto 0;height:var(--rail);z-index:20;
+  display:flex;align-items:center;gap:14px;padding:0 14px;
+  background:linear-gradient(180deg,#15191C,#101315);
+  border-bottom:1px solid var(--rule2)}
+.rail .brand{display:flex;align-items:center;gap:9px;padding-right:14px;
+  border-right:1px solid var(--rule);height:100%}
+.rail svg{width:19px;height:19px;flex:none}
+.rail .nm{font:700 12.5px/1.15 var(--sans);letter-spacing:-.01em}
+.rail .nm i{font-style:normal;color:var(--t3);font-weight:400}
+.rail .sub{font:500 8.5px/1 var(--mono);letter-spacing:.17em;color:var(--acc);
+  text-transform:uppercase;margin-top:3px}
+.idblock{display:flex;flex-direction:column;gap:3px}
+.idblock b{font:600 11px/1 var(--mono);letter-spacing:.06em}
+.grow{flex:1}
+.chips{display:flex;gap:7px;align-items:center}
+.chip{display:flex;align-items:center;gap:6px;height:25px;padding:0 9px;
+  border:1px solid var(--rule2);background:var(--sunk);
+  font:500 9.5px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--t2);white-space:nowrap}
+.led{width:6px;height:6px;border-radius:50%;background:var(--t4);flex:none}
+.chip.on{color:var(--t1)} .chip.on .led{background:var(--ok);
+  box-shadow:0 0 7px rgba(63,185,80,.75)}
+.chip.hot{color:#FFD9A8;border-color:rgba(255,153,51,.4)}
+.chip.hot .led{background:var(--acc);box-shadow:0 0 7px rgba(255,153,51,.8);
+  animation:blink 1.05s steps(2,end) infinite}
+.chip.err{color:#F0A08C;border-color:rgba(210,75,46,.45)}
+.chip.err .led{background:var(--bad);box-shadow:0 0 7px rgba(210,75,46,.7)}
+@keyframes blink{50%{opacity:.32}}
 
-/* ── lock screen ──────────────────────────────────────────────────────── */
-.lock{display:flex;flex-direction:column;align-items:center;gap:20px;
-      padding:34px 0 10px;animation:rise .32s ease both}
-@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.lock h2{margin:0;font-size:1.32rem;font-weight:700;letter-spacing:-.015em}
-.lock p{margin:0;color:var(--ash);font-size:.88rem;text-align:center;max-width:34ch}
-.dots{display:flex;gap:11px;height:15px}
-.dots i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--steel);
-        transition:.16s}
-.dots i.on{background:var(--saffron);border-color:var(--saffron);
-           box-shadow:0 0 12px rgba(255,153,51,.55)}
-.dots.bad i{border-color:var(--ember);background:transparent;
-            animation:shake .34s}
-@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-.pad{display:grid;grid-template-columns:repeat(3,74px);gap:10px}
-.pad button{height:60px;border:1px solid var(--line);background:var(--panel);
-  color:var(--paper);font:500 1.22rem/1 var(--mono);border-radius:var(--r);
-  cursor:pointer;transition:.12s}
-.pad button:active{background:var(--saffron);color:var(--ink);transform:scale(.96)}
-.pad button.aux{font-size:.66rem;letter-spacing:.12em;color:var(--ash)}
-.pad button:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+/* ── shell ───────────────────────────────────────────────────────────── */
+.shell{padding:calc(var(--rail) + 12px) 14px calc(var(--foot) + 20px);
+  max-width:1320px;margin:0 auto}
+.cols{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:1040px){.cols{grid-template-columns:minmax(0,1.06fr) minmax(0,1fr)}}
+.stack{display:flex;flex-direction:column;gap:12px;min-width:0}
 
-/* ── drawers ──────────────────────────────────────────────────────────── */
-.grid{display:grid;gap:12px;grid-template-columns:1fr}
-@media(min-width:660px){.grid{grid-template-columns:1fr 1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-      overflow:hidden;display:flex;flex-direction:column}
-.card header{display:flex;align-items:center;gap:10px;padding:13px 15px;
-             border-bottom:1px solid var(--line)}
-.card header h3{margin:0;font-size:.98rem;font-weight:650;letter-spacing:-.01em}
-.card header .grow{flex:1}
+.panel{background:var(--panel);border:1px solid var(--rule);min-width:0}
+.phead{display:flex;align-items:center;gap:10px;height:33px;padding:0 12px;
+  border-bottom:1px solid var(--rule);background:var(--panel2)}
+.phead h2{margin:0;font:600 10px/1 var(--mono);letter-spacing:.19em;
+  text-transform:uppercase;color:var(--t2)}
+.phead .tag{font:500 9.5px/1 var(--mono);letter-spacing:.12em;color:var(--t3)}
 
-/* the drawer, drawn. A status word is abstract; a rectangle sliding out of a
-   rectangle is the product. */
-.viz{height:74px;position:relative;background:var(--ink);overflow:hidden;
-     border-bottom:1px solid var(--line)}
-.viz .case{position:absolute;inset:14px 16px;border:2px solid var(--steel);
-           border-radius:2px}
-.viz .dwr{position:absolute;top:20px;bottom:20px;left:22px;width:44%;
-  background:linear-gradient(180deg,var(--saffron),#E07E1E);border-radius:2px;
-  transition:transform .95s cubic-bezier(.32,.72,.3,1);
-  box-shadow:0 3px 12px rgba(0,0,0,.45)}
-.viz .dwr::after{content:"";position:absolute;right:7px;top:50%;
-  transform:translateY(-50%);width:12px;height:3px;border-radius:2px;
-  background:rgba(20,21,24,.5)}
-.card.open .viz .dwr{transform:translateX(58%)}
-.card.busy .viz .dwr{filter:saturate(.7)}
+/* ── bay ─────────────────────────────────────────────────────────────── */
+.bay .phead h2{color:var(--t1)}
+.bay.live .phead{background:linear-gradient(90deg,rgba(255,153,51,.13),transparent)}
+.bay.live .phead h2{color:var(--acc)}
+.elev{background:var(--sunk);border-bottom:1px solid var(--rule);padding:6px 0 0}
+.elev svg{display:block;width:100%;height:auto}
+.tele{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--rule)}
+.tele div{padding:8px 12px;border-right:1px solid var(--rule);min-width:0}
+.tele div:last-child{border-right:0}
+.tele b{display:block;font:600 15px/1.15 var(--mono);letter-spacing:-.01em;
+  margin-top:5px;white-space:nowrap}
+.tele b.dim{color:var(--t3);font-weight:500}
+.tele b.hot{color:var(--acc)}
+.act{display:flex;gap:1px;background:var(--rule)}
+.act button{flex:1;height:44px;border:0;background:var(--panel2);color:var(--t1);
+  font:600 10.5px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  cursor:pointer;transition:background .12s,color .12s}
+.act button:hover:not(:disabled){background:#1E2429}
+.act button.primary{background:var(--acc);color:#17120A}
+.act button.primary:hover:not(:disabled){background:#FFA84D}
+.act button:disabled{color:var(--t4);cursor:not-allowed;background:var(--panel2)}
+.act button:focus-visible{outline:2px solid var(--acc);outline-offset:-3px}
 
-.body{padding:13px 15px;display:flex;flex-direction:column;gap:12px;flex:1}
-.tools{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);
-       border-radius:var(--r);overflow:hidden}
-.tools div{display:flex;gap:10px;align-items:baseline;padding:7px 11px;
-           border-bottom:1px solid var(--line);font-size:.8rem}
-.tools div:last-child{border-bottom:0}
-.tools b{font-family:var(--mono);font-size:.66rem;color:var(--saffron);
-         letter-spacing:.06em;min-width:20px}
-.tools span{flex:1;color:var(--paper)}
-.tools em{font-family:var(--mono);font-size:.66rem;color:var(--ash);
-          font-style:normal}
-.meta{display:flex;justify-content:space-between;font-family:var(--mono);
-      font-size:.63rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash)}
+/* ── tables ──────────────────────────────────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.tbl th{text-align:left;padding:7px 12px;background:var(--sunk);
+  font:500 9px/1 var(--mono);letter-spacing:.17em;text-transform:uppercase;
+  color:var(--t3);border-bottom:1px solid var(--rule);white-space:nowrap}
+.tbl td{padding:7px 12px;border-bottom:1px solid var(--rule);color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.k{color:var(--acc);width:44px}
+.tbl td.d{color:var(--t1);white-space:normal;min-width:130px}
+.tbl td.r{text-align:right;color:var(--t3)}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;
+  letter-spacing:.13em;text-transform:uppercase}
+.st::before{content:"";width:5px;height:5px;background:currentColor;flex:none}
+.st.in{color:var(--t3)} .st.out{color:var(--acc)}
+.scroll{max-height:246px;overflow:auto;overscroll-behavior:contain}
+.scroll::-webkit-scrollbar{width:9px}
+.scroll::-webkit-scrollbar-thumb{background:var(--rule2)}
 
-button.act{width:100%;padding:13px;border:0;border-radius:var(--r);
-  font:650 .82rem/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;
-  cursor:pointer;transition:.14s;background:var(--saffron);color:var(--ink)}
-button.act:hover{filter:brightness(1.07)}
-button.act:active{transform:scale(.985)}
-button.act.shut{background:transparent;color:var(--paper);
-                border:1px solid var(--line)}
-button.act:disabled{opacity:.45;cursor:not-allowed;transform:none}
-button.act:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+/* ── ledger ──────────────────────────────────────────────────────────── */
+.led-row{display:grid;grid-template-columns:8px 62px 104px 1fr;gap:0;
+  border-bottom:1px solid var(--rule);align-items:stretch}
+.led-row:last-child{border-bottom:0}
+.led-row i{background:var(--t4)}
+.led-row.e-open i{background:var(--acc)} .led-row.e-unlock i{background:var(--ok)}
+.led-row.e-rej i{background:var(--bad)}  .led-row.e-cal i{background:var(--warn)}
+.led-row span{padding:6.5px 10px;font:400 10.5px/1.3 var(--mono);color:var(--t3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.led-row .w{color:var(--t1);letter-spacing:.09em}
+.led-row.e-rej .w{color:var(--bad)}
+.led-row.e-open .w{color:var(--acc)}
+.empty{padding:20px;text-align:center;color:var(--t4);font:400 10.5px/1 var(--mono);
+  letter-spacing:.14em;text-transform:uppercase}
 
-/* ── log + calibration ────────────────────────────────────────────────── */
-section{margin-top:22px}
-.shead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-.shead h2{margin:0;font-size:.72rem;font-weight:600;letter-spacing:.18em;
-          text-transform:uppercase;color:var(--ash);font-family:var(--mono)}
-.shead .grow{flex:1}
-.mini{background:none;border:1px solid var(--line);color:var(--ash);
-      font:500 .6rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
-      padding:6px 10px;border-radius:var(--r);cursor:pointer}
-.mini:hover{color:var(--paper);border-color:var(--steel)}
-.log{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
-     background:var(--panel)}
-.log div{display:grid;grid-template-columns:76px 96px 1fr;gap:10px;
-  padding:7px 12px;border-bottom:1px solid var(--line);
-  font-family:var(--mono);font-size:.68rem;align-items:baseline}
-.log div:last-child{border-bottom:0}
-.log .t{color:var(--ash)}
-.log .w{font-weight:600;letter-spacing:.06em}
-.log .w.OPENED{color:var(--saffron)} .log .w.CLOSED{color:var(--ash)}
-.log .w.UNLOCKED{color:var(--ok)} .log .w.LOCKED{color:var(--ash)}
-.log .w[class*="REJECT"]{color:var(--ember)}
-.log .d{color:var(--steel)}
-.empty{padding:16px 12px;color:var(--steel);font-family:var(--mono);
-       font-size:.68rem;text-align:center}
-
-.cal{display:none;background:var(--panel);border:1px solid var(--line);
-     border-radius:var(--r);padding:13px 15px;gap:12px;flex-direction:column}
+/* ── calibration ─────────────────────────────────────────────────────── */
+.cal{padding:12px;display:none;flex-direction:column;gap:12px}
 .cal.show{display:flex}
-.cal .row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
-.cal label{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;
-           text-transform:uppercase;color:var(--ash);min-width:82px}
-.cal input[type=range]{flex:1;min-width:150px;accent-color:var(--saffron)}
-.cal output{font-family:var(--mono);font-size:.72rem;min-width:62px;
-            text-align:right;color:var(--saffron)}
-.note{color:var(--steel);font-size:.74rem;line-height:1.45}
-.note b{color:var(--warn);font-weight:600}
+.crow{display:grid;grid-template-columns:104px 1fr 74px;gap:11px;align-items:center}
+.crow input{width:100%;accent-color:var(--acc);height:3px}
+.crow output{text-align:right;font:600 11px/1 var(--mono);color:var(--acc)}
+.warnbox{border-left:2px solid var(--warn);padding:8px 11px;background:var(--sunk);
+  font:400 10.5px/1.5 var(--mono);color:var(--t2)}
+.warnbox b{color:var(--warn);font-weight:600}
 
-.foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);
-      display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-      font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;
-      text-transform:uppercase;color:var(--steel)}
+/* ── lock screen ─────────────────────────────────────────────────────── */
+.auth{position:fixed;inset:0;z-index:40;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:16px}
+.auth.hide{display:none}
+.authbox{width:100%;max-width:376px;border:1px solid var(--rule2);
+  background:var(--panel);animation:in .3s cubic-bezier(.2,.7,.3,1) both}
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.authhead{padding:16px 18px;border-bottom:1px solid var(--rule);
+  background:var(--panel2)}
+.authhead h1{margin:0 0 3px;font:700 15px/1.2 var(--sans);letter-spacing:-.015em}
+.authhead p{margin:0;font:400 10.5px/1.5 var(--mono);color:var(--t3)}
+.authid{display:flex;gap:0;border-bottom:1px solid var(--rule)}
+.authid div{flex:1;padding:9px 12px;border-right:1px solid var(--rule)}
+.authid div:last-child{border-right:0}
+.authid b{display:block;font:600 11px/1 var(--mono);margin-top:5px}
+.pinbox{padding:20px 18px 14px;display:flex;flex-direction:column;
+  align-items:center;gap:14px}
+.segs{display:flex;gap:7px}
+.segs i{width:38px;height:44px;border:1px solid var(--rule2);background:var(--sunk);
+  display:flex;align-items:center;justify-content:center;
+  font:600 19px/1 var(--mono);color:var(--acc);transition:.13s}
+.segs i.f{border-color:var(--acc);box-shadow:inset 0 0 12px rgba(255,153,51,.14)}
+.segs.bad i{border-color:var(--bad);color:var(--bad);animation:nudge .3s}
+@keyframes nudge{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.msg{font:500 9.5px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase;
+  color:var(--t4);height:11px}
+.msg.bad{color:var(--bad)}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
+  border-top:1px solid var(--rule)}
+.keys button{height:56px;border:0;background:var(--panel2);color:var(--t1);
+  font:500 17px/1 var(--mono);cursor:pointer;transition:.1s}
+.keys button:active{background:var(--acc);color:#17120A}
+.keys button.a{font-size:9.5px;letter-spacing:.16em;color:var(--t3)}
+.keys button:focus-visible{outline:2px solid var(--acc);outline-offset:-3px}
+
+/* ── bottom rail ─────────────────────────────────────────────────────── */
+.foot{position:fixed;inset:auto 0 0 0;height:var(--foot);z-index:20;
+  display:flex;align-items:center;gap:0;padding:0 14px;background:#0E1113;
+  border-top:1px solid var(--rule2);overflow-x:auto}
+.foot span{font:400 9.5px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--t3);padding-right:16px;margin-right:16px;
+  border-right:1px solid var(--rule);white-space:nowrap}
+.foot span:last-child{border-right:0}
+.foot b{color:var(--t2);font-weight:500}
 .hide{display:none!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(max-width:520px){
+  .tele{grid-template-columns:repeat(2,1fr)}
+  .tele div:nth-child(2){border-right:0}
+  .rail .sub,.authid div:nth-child(3){display:none}
+}
 </style></head>
 <body>
-<div class="wrap">
 
-  <div class="mast">
-    <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
-      <path d="M6 30 L20 6 L34 30 Z" fill="none" stroke="#FF9933" stroke-width="2.4"
+<!-- ── authentication ──────────────────────────────────────────────────── -->
+<div class="auth" id="auth">
+  <div class="authbox">
+    <div class="authhead">
+      <h1>Tool access control</h1>
+      <p>Authorisation required. Every movement is recorded.</p>
+    </div>
+    <div class="authid">
+      <div><div class="lbl">Unit</div><b id="a-unit">&mdash;</b></div>
+      <div><div class="lbl">Firmware</div><b id="a-fw">&mdash;</b></div>
+      <div><div class="lbl">Link</div><b id="a-net">&mdash;</b></div>
+    </div>
+    <div class="pinbox">
+      <div class="lbl">Operator PIN</div>
+      <div class="segs" id="segs"><i></i><i></i><i></i><i></i></div>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div class="keys" id="keys"></div>
+  </div>
+</div>
+
+<!-- ── terminal ────────────────────────────────────────────────────────── -->
+<header class="rail">
+  <div class="brand">
+    <svg viewBox="0 0 40 40" aria-hidden="true">
+      <path d="M6 31 L20 6 L34 31 Z" fill="none" stroke="#FF9933" stroke-width="2.6"
             stroke-linejoin="round"/>
-      <path d="M13 30 L20 18 L27 30 Z" fill="#FF5533"/>
+      <path d="M13.5 31 L20 19 L26.5 31 Z" fill="#FF5533"/>
     </svg>
     <div>
-      <div class="eyebrow">Ommi Forge</div>
-      <h1>shopkeeper <span>NANO</span></h1>
+      <div class="nm">shopkeeper <i>NANO</i></div>
+      <div class="sub">Ommi Forge</div>
     </div>
-    <div class="grow"></div>
-    <div class="pill" id="net">&mdash;</div>
-    <div class="pill shut" id="lockpill">Locked</div>
   </div>
-
-  <!-- ── lock ──────────────────────────────────────────────────────────── -->
-  <div id="lock" class="lock">
-    <h2>Enter access PIN</h2>
-    <p>Every drawer movement is recorded against this session.</p>
-    <div class="dots" id="dots"><i></i><i></i><i></i><i></i></div>
-    <div class="pad" id="pad"></div>
+  <div class="idblock">
+    <div class="lbl">Unit</div><b id="t-unit">&mdash;</b>
   </div>
+  <div class="idblock">
+    <div class="lbl">Site</div><b id="t-site">&mdash;</b>
+  </div>
+  <div class="grow"></div>
+  <div class="chips">
+    <div class="chip" id="c-net"><i class="led"></i><span>link</span></div>
+    <div class="chip" id="c-drv"><i class="led"></i><span>drive</span></div>
+    <div class="chip" id="c-ses"><i class="led"></i><span id="c-ses-t">session</span></div>
+  </div>
+</header>
 
-  <!-- ── console ───────────────────────────────────────────────────────── -->
-  <div id="console" class="hide">
-    <div class="grid" id="grid"></div>
+<div class="shell">
+  <div class="cols">
+    <div class="stack" id="bays"></div>
+    <div class="stack">
 
-    <section>
-      <div class="shead">
-        <h2>Activity</h2><div class="grow"></div>
-        <button class="mini" id="clear">Clear</button>
-        <button class="mini" id="calbtn">Calibrate</button>
-        <button class="mini" id="lockbtn">Lock</button>
+      <div class="panel">
+        <div class="phead"><h2>Tool register</h2><div class="grow"></div>
+          <span class="tag" id="reg-n">&mdash;</span></div>
+        <div class="scroll"><table class="tbl" id="reg"></table></div>
       </div>
-      <div class="cal" id="cal"></div>
-      <div class="log" id="log"></div>
-    </section>
 
-    <div class="foot">
-      <span id="uptime">&mdash;</span>
-      <span id="mem">&mdash;</span>
-      <span>m1.25 &times; 16T &middot; 31.4 mm</span>
+      <div class="panel">
+        <div class="phead"><h2>Event ledger</h2><div class="grow"></div>
+          <span class="tag" id="led-n">&mdash;</span></div>
+        <div class="scroll" id="ledger"></div>
+      </div>
+
+      <div class="panel">
+        <div class="phead"><h2>Service</h2><div class="grow"></div></div>
+        <div class="act" style="background:var(--rule)">
+          <button id="b-cal">Calibrate</button>
+          <button id="b-clr">Clear ledger</button>
+          <button id="b-lock">End session</button>
+        </div>
+        <div class="cal" id="cal"></div>
+      </div>
+
     </div>
   </div>
 </div>
 
+<footer class="foot">
+  <span>FW <b id="f-fw">&mdash;</b></span>
+  <span>Drive <b>SG90 &times;2</b></span>
+  <span>Gear <b>m1.25 &times; 16T</b></span>
+  <span>Stroke <b id="f-stroke">&mdash;</b></span>
+  <span>Pulse <b id="f-pulse">&mdash;</b></span>
+  <span>Heap <b id="f-mem">&mdash;</b></span>
+  <span>Uptime <b id="f-up">&mdash;</b></span>
+</footer>
+
 <script>
-var S = null, entry = "", polling = null;
+"use strict";
+var S = null, entry = "", calOpen = false, calBuilt = false;
 
-function api(path, opts) {
-  return fetch(path, opts).then(function (r) {
-    return r.json().then(function (j) { j._code = r.status; return j; });
-  });
-}
-function post(path, body) {
-  return api(path, { method: "POST", headers: { "Content-Type": "application/json" },
-                     body: JSON.stringify(body || {}) });
-}
+function $(id){ return document.getElementById(id); }
+function api(p, o){ return fetch(p, o).then(function(r){
+  return r.json().then(function(j){ j._c = r.status; return j; }); }); }
+function post(p, b){ return api(p, {method:"POST",
+  headers:{"Content-Type":"application/json"}, body:JSON.stringify(b||{})}); }
+function esc(s){ return String(s).replace(/[&<>]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; }); }
+function dur(s){ s = Math.max(0, s|0);
+  var h = (s/3600)|0, m = ((s%3600)/60)|0, x = s%60;
+  return h ? h+"h "+(m<10?"0":"")+m+"m" : m ? m+"m "+(x<10?"0":"")+x+"s" : x+"s"; }
+function clock(s){ s = Math.max(0, s|0);
+  var m = (s/60)|0, x = s%60; return m+":"+(x<10?"0":"")+x; }
 
-/* ── keypad ─────────────────────────────────────────────────────────────── */
-var pad = document.getElementById("pad");
-["1","2","3","4","5","6","7","8","9","CLR","0","OK"].forEach(function (k) {
+/* ── keypad ──────────────────────────────────────────────────────────── */
+["1","2","3","4","5","6","7","8","9","CLR","0","ENT"].forEach(function(k){
   var b = document.createElement("button");
   b.textContent = k;
-  if (k === "CLR" || k === "OK") b.className = "aux";
-  b.onclick = function () { key(k); };
-  pad.appendChild(b);
+  if (k === "CLR" || k === "ENT") b.className = "a";
+  b.onclick = function(){ key(k); };
+  $("keys").appendChild(b);
 });
-function drawDots(bad) {
-  var d = document.getElementById("dots");
-  d.className = "dots" + (bad ? " bad" : "");
-  [].forEach.call(d.children, function (i, n) {
-    i.className = n < entry.length ? "on" : "";
+function segs(bad){
+  var e = $("segs");
+  e.className = "segs" + (bad ? " bad" : "");
+  [].forEach.call(e.children, function(i, n){
+    i.textContent = n < entry.length ? "•" : "";
+    i.className = n === entry.length && !bad ? "f" : "";
   });
 }
-function key(k) {
-  if (k === "CLR") { entry = ""; drawDots(false); return; }
-  if (k === "OK") { submit(); return; }
-  if (entry.length < 8) { entry += k; drawDots(false); }
-  if (entry.length === 4) setTimeout(submit, 130);
+function key(k){
+  if (k === "CLR"){ entry = ""; $("msg").className = "msg"; $("msg").textContent = ""; segs(false); return; }
+  if (k === "ENT"){ submit(); return; }
+  if (entry.length < 4){ entry += k; segs(false); }
+  if (entry.length === 4) setTimeout(submit, 120);
 }
-function submit() {
+function submit(){
   if (!entry) return;
-  var pin = entry;
-  post("/api/unlock", { pin: pin }).then(function (r) {
+  var p = entry;
+  post("/api/unlock", {pin:p}).then(function(r){
     entry = "";
-    if (r.ok) { drawDots(false); refresh(); }
-    else { drawDots(true); setTimeout(function () { drawDots(false); }, 420); }
+    var m = $("msg");
+    if (r.ok){ m.className = "msg"; m.textContent = "granted"; segs(false); refresh(); }
+    else {
+      m.className = "msg bad"; m.textContent = "denied — logged";
+      segs(true); setTimeout(function(){ segs(false); }, 460);
+    }
   });
 }
-document.addEventListener("keydown", function (e) {
+document.addEventListener("keydown", function(e){
   if (!S || !S.locked) return;
   if (e.key >= "0" && e.key <= "9") key(e.key);
-  else if (e.key === "Enter") key("OK");
-  else if (e.key === "Backspace") key("CLR");
+  else if (e.key === "Enter") key("ENT");
+  else if (e.key === "Backspace"){ e.preventDefault(); key("CLR"); }
 });
 
-/* ── render ─────────────────────────────────────────────────────────────── */
-function fmtUp(s) {
-  s = Math.max(0, s | 0);
-  var h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0;
-  return h ? h + "h " + m + "m" : m ? m + "m " + (s % 60) + "s" : s + "s";
+/* ── bay elevation ───────────────────────────────────────────────────────
+   A section through the cabinet with the drawer where it actually is, and a
+   dimension line under it carrying the live figure. This is the difference
+   between a status word and a machine: an engineer reads the drawing, checks
+   the number against it, and believes both.                              */
+function elevation(d){
+  var PPM = 2.15, CASE = 74, DRW = 59, tr = d.travel_mm;
+  var x0 = 26, y0 = 22, cw = CASE*PPM, ch = 54;
+  var dx = x0 + 5, dw = DRW*PPM, dh = ch - 14;
+  var off = (d.pos || 0) * tr * PPM;
+  var W = 360, H = 108;
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="drawer position">'+
+    '<defs><linearGradient id="g'+d.id+'" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0" stop-color="#FFB259"/><stop offset="1" stop-color="#D97F14"/>'+
+    '</linearGradient></defs>'+
+    /* deck line */
+    '<line x1="'+(x0-8)+'" y1="'+(y0+ch)+'" x2="'+(x0+cw+96)+'" y2="'+(y0+ch)+'" '+
+      'stroke="#2E353B" stroke-width="1"/>'+
+    /* case */
+    '<rect x="'+x0+'" y="'+y0+'" width="'+cw+'" height="'+ch+'" fill="none" '+
+      'stroke="#59636B" stroke-width="1.6"/>'+
+    /* mouth: the case is open at the front, so break the line there */
+    '<rect x="'+(x0+cw-2)+'" y="'+(y0+4)+'" width="4" height="'+(dh+2)+'" fill="#0E1113"/>'+
+    /* drawer */
+    '<g transform="translate('+off.toFixed(2)+',0)">'+
+      '<rect x="'+dx+'" y="'+(y0+7)+'" width="'+dw+'" height="'+dh+'" rx="1" '+
+        'fill="url(#g'+d.id+')"/>'+
+      '<rect x="'+(dx+dw-9)+'" y="'+(y0+7+dh/2-2)+'" width="6" height="4" '+
+        'fill="rgba(20,18,10,.45)"/>'+
+    '</g>'+
+    /* dimension line for the stroke */
+    '<g stroke="#5F686F" stroke-width="1" fill="none">'+
+      '<line x1="'+(x0+cw)+'" y1="'+(y0+ch+9)+'" x2="'+(x0+cw)+'" y2="'+(y0+ch+21)+'"/>'+
+      '<line x1="'+(x0+cw+tr*PPM)+'" y1="'+(y0+ch+9)+'" x2="'+(x0+cw+tr*PPM)+'" y2="'+(y0+ch+21)+'"/>'+
+      '<line x1="'+(x0+cw)+'" y1="'+(y0+ch+15)+'" x2="'+(x0+cw+tr*PPM)+'" y2="'+(y0+ch+15)+'"/>'+
+    '</g>'+
+    '<text x="'+(x0+cw+tr*PPM+7)+'" y="'+(y0+ch+18.5)+'" fill="#97A0A8" '+
+      'font-family="ui-monospace,Menlo,monospace" font-size="9.5">'+
+      tr.toFixed(1)+' mm</text>'+
+    /* live position marker */
+    '<text x="'+x0+'" y="'+(y0-7)+'" fill="#5F686F" '+
+      'font-family="ui-monospace,Menlo,monospace" font-size="9" '+
+      'letter-spacing="1.6">SECTION A-A</text>'+
+    '</svg>';
 }
-function drawerCard(d) {
-  var rows = d.tools.map(function (t) {
-    return '<div><b>' + t.slot + '</b><span>' + t.tool + '</span><em>' + t.code + '</em></div>';
-  }).join("");
-  return '' +
-    '<div class="card' + (d.open ? " open" : "") + (d.busy ? " busy" : "") + '" data-id="' + d.id + '">' +
-      '<header><h3>' + d.name + '</h3><div class="grow"></div>' +
-        '<div class="pill' + (d.open ? " live" : "") + '">' +
-          (d.busy ? "Moving" : d.open ? "Open" : "Closed") + '</div></header>' +
-      '<div class="viz"><div class="case"></div><div class="dwr"></div></div>' +
-      '<div class="body">' +
-        '<div class="tools">' + rows + '</div>' +
-        '<div class="meta"><span>' + d.travel_mm + ' mm travel</span>' +
-          '<span>' + d.closed_us + '&ndash;' + d.open_us + ' &micro;s</span></div>' +
-        '<button class="act' + (d.open ? " shut" : "") + '"' + (d.busy ? " disabled" : "") + '>' +
-          (d.busy ? "Working" : d.open ? "Close drawer" : "Open drawer") + '</button>' +
-      '</div></div>';
-}
-function render() {
-  var locked = S.locked;
-  document.getElementById("lock").classList.toggle("hide", !locked);
-  document.getElementById("console").classList.toggle("hide", locked);
-  var lp = document.getElementById("lockpill");
-  lp.textContent = locked ? "Locked" : "Unlocked";
-  lp.className = "pill " + (locked ? "shut" : "live");
-  if (locked) return;
 
-  document.getElementById("grid").innerHTML = S.drawers.map(drawerCard).join("");
-  [].forEach.call(document.querySelectorAll(".card"), function (c) {
-    var id = +c.dataset.id, d = S.drawers[id];
-    var b = c.querySelector("button.act");
-    if (b) b.onclick = function () {
+function bay(d, i){
+  var moving = d.busy, mm = (d.pos || 0) * d.travel_mm;
+  return '<section class="panel bay'+(moving?" live":"")+'" data-id="'+d.id+'">'+
+    '<div class="phead"><h2>Bay 0'+(i+1)+' &nbsp;&middot;&nbsp; '+esc(d.name)+'</h2>'+
+      '<div class="grow"></div><span class="tag">GPIO '+d.pin+'</span></div>'+
+    '<div class="elev">'+elevation(d)+'</div>'+
+    '<div class="tele">'+
+      '<div><div class="lbl">Position</div><b class="'+(moving?"hot":(d.open?"":"dim"))+'">'+
+        mm.toFixed(1)+'<span style="font-size:10px;color:var(--t3)"> mm</span></b></div>'+
+      '<div><div class="lbl">State</div><b class="'+(moving?"hot":(d.open?"":"dim"))+'">'+
+        (moving ? "MOVING" : d.open ? "OPEN" : "SECURED")+'</b></div>'+
+      '<div><div class="lbl">Cycles</div><b class="dim">'+d.cycles+'</b></div>'+
+      '<div><div class="lbl">Pulse</div><b class="dim">'+d.us+
+        '<span style="font-size:10px;color:var(--t3)"> µs</span></b></div>'+
+    '</div>'+
+    '<div class="act">'+
+      '<button class="'+(d.open?"":"primary")+'" data-act="1"'+(moving?" disabled":"")+'>'+
+        (moving ? "Working" : d.open ? "Secure bay" : "Release bay")+'</button>'+
+    '</div></section>';
+}
+
+/* ── render ──────────────────────────────────────────────────────────── */
+function render(){
+  $("auth").classList.toggle("hide", !S.locked);
+  $("a-unit").textContent = S.unit; $("t-unit").textContent = S.unit;
+  $("a-fw").textContent = S.fw;     $("f-fw").textContent = S.fw;
+  $("a-net").textContent = (S.net||"").split(":")[0] || "—";
+  $("t-site").textContent = S.site;
+
+  var moving = S.drawers.some(function(d){ return d.busy; });
+  var powered = S.drawers.some(function(d){ return d.powered; });
+  $("c-net").className = "chip on";
+  $("c-net").lastElementChild.textContent = (S.net||"link").replace(":", " ");
+  $("c-drv").className = "chip" + (powered ? " hot" : "");
+  $("c-drv").lastElementChild.textContent = powered ? "drive live" : "drive idle";
+  $("c-ses").className = "chip" + (S.locked ? " err" : " on");
+  $("c-ses-t").textContent = S.locked ? "locked" : "session " + clock(S.left);
+
+  if (S.locked) return;
+
+  $("bays").innerHTML = S.drawers.map(bay).join("");
+  [].forEach.call(document.querySelectorAll(".bay"), function(sec){
+    var id = +sec.dataset.id, d = S.drawers[id];
+    var b = sec.querySelector("[data-act]");
+    if (!b || b.disabled) return;
+    b.onclick = function(){
       b.disabled = true; b.textContent = "Working";
-      c.classList.add("busy");
-      post("/api/drawer", { id: id, open: !d.open }).then(function () {
-        setTimeout(refresh, 260);
+      b.classList.remove("primary"); sec.classList.add("live");
+      post("/api/drawer", {id:id, open:!d.open}).then(function(){
+        setTimeout(refresh, 200);
       });
     };
   });
 
-  var log = document.getElementById("log");
-  log.innerHTML = S.log.length ? S.log.map(function (e) {
-    /* age, not absolute time: the cabinet has no RTC, so "4m ago" is the only
-       honest thing it can say */
-    return '<div><span class="t">' + fmtUp(S.uptime - e.up) + ' ago</span>' +
-           '<span class="w ' + e.what.replace(/\s/g, "") + '">' + e.what + '</span>' +
-           '<span class="d">' + (e.drawer === null || e.drawer === undefined ? "" :
-             (S.drawers[e.drawer] ? S.drawers[e.drawer].name : "")) +
-             (e.detail ? " &middot; " + e.detail : "") + '</span></div>';
-  }).join("") : '<div class="empty">no activity yet</div>';
+  /* tool register — one table across both bays, because a shop asks "where is
+     the 12H7 reamer", not "what is in bay two" */
+  var rows = "", n = 0;
+  S.drawers.forEach(function(d, i){
+    d.tools.forEach(function(t){
+      n++;
+      rows += '<tr><td class="k">'+esc(t.slot)+'</td>'+
+        '<td class="d">'+esc(t.tool)+'</td>'+
+        '<td>'+esc(t.code)+'</td>'+
+        '<td>BAY 0'+(i+1)+'</td>'+
+        '<td class="r"><span class="st '+(d.open?"out":"in")+'">'+
+          (d.open ? "accessible" : "secured")+'</span></td></tr>';
+    });
+  });
+  $("reg").innerHTML = '<thead><tr><th>Slot</th><th>Designation</th><th>Code</th>'+
+    '<th>Location</th><th style="text-align:right">Status</th></tr></thead><tbody>'+
+    rows + '</tbody>';
+  $("reg-n").textContent = n + " items";
 
-  document.getElementById("uptime").textContent = "up " + fmtUp(S.uptime);
-  document.getElementById("mem").textContent = (S.mem / 1024 | 0) + " KiB free";
+  var cls = {"OPENED":"e-open","CLOSED":"e-close","UNLOCKED":"e-unlock",
+             "LOCKED":"e-close","PIN REJECTED":"e-rej","CALIBRATED":"e-cal",
+             "BOOT":"e-close"};
+  $("ledger").innerHTML = S.log.length ? S.log.map(function(e){
+    var d = (e.drawer === null || e.drawer === undefined) ? ""
+          : "BAY 0" + (e.drawer + 1);
+    return '<div class="led-row '+(cls[e.what]||"")+'"><i></i>'+
+      '<span>'+dur(S.uptime - e.up)+'</span>'+
+      '<span class="w">'+esc(e.what)+'</span>'+
+      '<span>'+esc(d + (e.detail ? (d ? " · " : "") + e.detail : "") || "—")+'</span>'+
+      '</div>';
+  }).join("") : '<div class="empty">no events</div>';
+  $("led-n").textContent = S.log.length + " events";
+
+  var d0 = S.drawers[0];
+  $("f-stroke").textContent = d0.travel_mm + " mm / " + d0.deg + "°";
+  $("f-pulse").textContent = d0.closed_us + "–" + d0.open_us + " µs";
+  $("f-mem").textContent = ((S.mem/1024)|0) + " KiB";
+  $("f-up").textContent = dur(S.uptime);
   buildCal();
 }
 
-/* ── calibration ────────────────────────────────────────────────────────── */
-var calOpen = false;
-document.getElementById("calbtn").onclick = function () {
+/* ── calibration ─────────────────────────────────────────────────────── */
+$("b-cal").onclick = function(){
   calOpen = !calOpen;
-  document.getElementById("cal").classList.toggle("show", calOpen);
-  if (calOpen) buildCal();
+  $("cal").classList.toggle("show", calOpen);
+  $("b-cal").style.color = calOpen ? "var(--acc)" : "";
+  buildCal();
 };
-function buildCal() {
-  if (!calOpen) return;
-  var el = document.getElementById("cal");
-  if (el.dataset.built === "1") return;
-  el.dataset.built = "1";
-  el.innerHTML = S.drawers.map(function (d) {
-    return '<div class="row"><label>' + d.name + ' shut</label>' +
-      '<input type="range" min="500" max="2500" step="10" value="' + d.closed_us +
-      '" data-id="' + d.id + '" data-k="closed_us"><output>' + d.closed_us + ' &micro;s</output></div>' +
-      '<div class="row"><label>' + d.name + ' open</label>' +
-      '<input type="range" min="500" max="2500" step="10" value="' + d.open_us +
-      '" data-id="' + d.id + '" data-k="open_us"><output>' + d.open_us + ' &micro;s</output></div>';
+function buildCal(){
+  if (!calOpen || calBuilt || !S || S.locked) return;
+  calBuilt = true;
+  $("cal").innerHTML = S.drawers.map(function(d, i){
+    return ["closed_us","open_us"].map(function(k){
+      return '<div class="crow"><div class="lbl">Bay 0'+(i+1)+' '+
+        (k === "closed_us" ? "secured" : "released")+'</div>'+
+        '<input type="range" min="500" max="2500" step="10" value="'+d[k]+
+        '" data-id="'+d.id+'" data-k="'+k+'"><output>'+d[k]+' µs</output></div>';
+    }).join("");
   }).join("") +
-  '<p class="note">Dragging jogs the servo live so you can watch the drawer. ' +
-  'Endpoints are saved to flash on release. <b>Stop before the drawer strains:</b> ' +
-  'the mechanism has 31.4 mm of travel at a full 180&deg;, and most SG90s stall ' +
-  'against their own end stop before they get there.</p>';
-  [].forEach.call(el.querySelectorAll("input"), function (r) {
+  '<div class="warnbox">Dragging jogs the drive live. Endpoints commit to flash '+
+  'on release. <b>Stop before the drawer strains:</b> the mechanism has 31.4 mm '+
+  'of travel at a full 180&deg;, and most SG90 units stall against their own end '+
+  'stop before reaching it.</div>';
+  [].forEach.call($("cal").querySelectorAll("input"), function(r){
     var out = r.nextElementSibling;
-    r.oninput = function () {
-      out.innerHTML = r.value + " &micro;s";
-      post("/api/cal", { id: +r.dataset.id, jog_us: +r.value });
+    r.oninput = function(){
+      out.textContent = r.value + " µs";
+      post("/api/cal", {id:+r.dataset.id, jog_us:+r.value});
     };
-    r.onchange = function () {
-      var b = {}; b.id = +r.dataset.id; b[r.dataset.k] = +r.value;
-      post("/api/cal", b).then(function () { setTimeout(refresh, 200); });
+    r.onchange = function(){
+      var b = {id:+r.dataset.id}; b[r.dataset.k] = +r.value;
+      post("/api/cal", b).then(function(){ calBuilt = false; setTimeout(refresh, 180); });
     };
   });
 }
+$("b-lock").onclick = function(){ post("/api/lock").then(refresh); };
+$("b-clr").onclick = function(){ api("/api/log", {method:"DELETE"}).then(refresh); };
 
-document.getElementById("lockbtn").onclick = function () {
-  post("/api/lock").then(refresh);
-};
-document.getElementById("clear").onclick = function () {
-  api("/api/log", { method: "DELETE" }).then(refresh);
-};
-
-/* ── poll ───────────────────────────────────────────────────────────────── */
-function refresh() {
-  return api("/api/state").then(function (j) {
-    S = j;
-    document.getElementById("net").textContent = "online";
-    document.getElementById("net").className = "pill live";
-    render();
-  }).catch(function () {
-    document.getElementById("net").textContent = "offline";
-    document.getElementById("net").className = "pill shut";
-  });
+/* ── poll ────────────────────────────────────────────────────────────── */
+var timer = null;
+function schedule(){
+  clearTimeout(timer);
+  /* A drawer mid-stroke wants a fast tick so the elevation tracks it; an idle
+     cabinet does not, and the ESP32 has a servo loop to run. */
+  var moving = S && S.drawers && S.drawers.some(function(d){ return d.busy; });
+  timer = setTimeout(refresh, moving ? 220 : (S && S.locked ? 2000 : 1000));
+}
+function refresh(){
+  return api("/api/state").then(function(j){
+    S = j; render();
+  }).catch(function(){
+    $("c-net").className = "chip err";
+    $("c-net").lastElementChild.textContent = "no link";
+  }).then(schedule);
 }
 refresh();
-setInterval(function () {
-  /* Only poll while something can change. A drawer mid-move needs a fast tick;
-     an idle unlocked cabinet does not, and the ESP has better things to do. */
-  var moving = S && S.drawers && S.drawers.some(function (d) { return d.busy; });
-  if (moving || !S || S.locked) refresh();
-}, 1400);
-setInterval(refresh, 5000);
 </script>
 </body></html>

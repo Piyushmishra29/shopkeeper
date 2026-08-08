@@ -74,4 +74,11 @@ TOOLS = {
     ],
 }
 
+# ── identity ───────────────────────────────────────────────────────────────
+# A cabinet on a shop floor has an asset tag, and the UI shows it. This is the
+# difference between a demo and a machine somebody signs for.
+UNIT     = "SK-N-0001"
+FW       = "1.0.0"
+SITE     = "OMMI FORGE / MALUR"
+
 DATA_DIR = "/data"
