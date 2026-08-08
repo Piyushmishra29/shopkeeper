@@ -216,7 +216,9 @@ def case_lower():
     # ── USB-C x2 (native + UART) on the RIGHT-HAND wall ──
     # They sit on one END of the DevKit, and that end faces a SIDE wall, not
     # the rear. Orient the board with its USB end to the right.
-    m=diff(m,blk(CW-WL-1, CW+1, EY-13.0, EY+13.0, 6.0, 20.0))
+    # Ports measured at 15 mm above the assembly base, which sits on the 1.4 mm
+    # floor -> centreline z = 16.4. Window centred on that with 5 mm each way.
+    m=diff(m,blk(CW-WL-1, CW+1, EY-13.0, EY+13.0, 11.4, 21.4))
     m=diff(m,cyl_y(8.0,CD-WL-1,CD+1,CW-11,12))
     for i in range(2):
         z=8+i*8
