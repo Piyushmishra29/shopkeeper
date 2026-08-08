@@ -2,14 +2,24 @@
 """
 shopkeeper NANO — two motorised drawers, as small as an SG90 allows.
 
-92 x 66 x 50 mm. Two drawers SIDE BY SIDE so one mechanism deck serves both;
+92 x 74 x 66 mm. Two drawers SIDE BY SIDE so one mechanism deck serves both;
 stacking them would have doubled the height, because a vertical SG90 costs
 26 mm of dead space under every deck.
 
-    top          0.91" OLED + 2 LEDs on the top face
-    drawers      2 x (42 x 55 x 18), each driven out 23.6 mm
-    deck         slotted for both drive fins
-    mech bay     2 x SG90 (shaft up) + 2 pinions + ESP32-S3
+    top          0.91" OLED + 2 LEDs on the top face, and the OMMI FORGE mark
+                 debossed into it, filled by the printed logo inlay
+    drawers      2 x (39.8 x 59 x 18), riding on the deck, each pushed by a
+                 rack whose drive fin hangs through the deck into the bay
+    deck         2.5 thick at z=39.5, slotted for both drive fins
+    mech bay     everything under the deck: 2 x SG90 (shaft up, each sitting
+                 on a 4.6 mm printed shim) + 2 pinions + 2 racks + the
+                 ESP32-S3 on its breadboard, behind the servos
+
+Full mechanical travel is 31.42 mm - pi x the 10.0 mm pitch radius, which is
+exactly one half turn of the m1.25 x 16T pinion. The firmware deliberately
+commands less than all of it (650..2350 us = 1700 us = 153 deg = 26.7 mm),
+holding 4.7 mm of the stroke back so the servo never drives onto its own end
+stop; the geometry below is still cut for the full 31.42.
 
 Geometry is verified by boolean interference sweep across the full stroke,
 not by dimension arithmetic — that is what caught every bug in the bigger
@@ -331,8 +341,9 @@ def case_lower():
     m=union([m,blk(EX-EBL/2-EBX-1.6, EX-EBL/2-EBX, EY-EBW/2-1.4, EY+EBW/2+1.4,
                    FT, FT+5.2)])
 
-    # No breadboard. A half-size board plus a 55 x 28 DevKit plus two servos
-    # does not fit a 92 x 66 case - the pillars landed on both servos. The
+    # This comment used to say "No breadboard" and describe a 92 x 66 case.
+    # Both were superseded: the case is 92 x 74 x 66 and the breadboard is
+    # modelled thirty lines above. Rear vents. The
     # DevKit's own headers take dupont leads directly.
     for wx in (20,40,60):
         m=diff(m,blk(wx,wx+15,CD-WL-1,CD+1,5,19))

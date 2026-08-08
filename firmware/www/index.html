@@ -144,6 +144,23 @@ body{
 .crow{display:grid;grid-template-columns:104px 1fr 74px;gap:11px;align-items:center}
 .crow input{width:100%;accent-color:var(--acc);height:3px}
 .crow output{text-align:right;font:600 11px/1 var(--mono);color:var(--acc)}
+.finder{border:1px solid var(--rule2);background:var(--sunk);padding:11px 12px;
+  display:flex;flex-direction:column;gap:9px}
+.finder .hdr{display:flex;align-items:center;gap:9px}
+.finder .hdr b{font:600 10.5px/1 var(--mono);letter-spacing:.14em;
+  text-transform:uppercase}
+.finder .live{font:600 20px/1 var(--mono);color:var(--acc);
+  font-variant-numeric:tabular-nums}
+.finder .btns{display:flex;gap:1px;background:var(--rule)}
+.finder .btns button{flex:1;height:36px;border:0;background:var(--panel2);
+  color:var(--t1);font:600 9.5px/1 var(--mono);letter-spacing:.15em;
+  text-transform:uppercase;cursor:pointer}
+.finder .btns button:hover{background:#1E2429}
+.finder .btns button.stop{background:var(--bad);color:#fff;
+  animation:blink 1s steps(2,end) infinite}
+.finder .got{display:flex;gap:14px;font:400 10px/1 var(--mono);color:var(--t3);
+  letter-spacing:.1em;text-transform:uppercase}
+.finder .got b{color:var(--ok);font-weight:600}
 .warnbox{border-left:2px solid var(--warn);padding:8px 11px;background:var(--sunk);
   font:400 10.5px/1.5 var(--mono);color:var(--t2)}
 .warnbox b{color:var(--warn);font-weight:600}
@@ -431,8 +448,15 @@ function render(){
   $("c-net").lastElementChild.textContent = (S.net||"link").replace(":", " ");
   $("c-drv").className = "chip" + (powered ? " hot" : "");
   $("c-drv").lastElementChild.textContent = powered ? "drive live" : "drive idle";
-  $("c-ses").className = "chip" + (S.locked ? " err" : " on");
-  $("c-ses-t").textContent = S.locked ? "locked" : "session " + clock(S.left);
+  if (S.bypass) {
+    /* Impossible to miss on purpose: showing this cabinet with the lock off
+       would undo the entire argument it is built on. */
+    $("c-ses").className = "chip err";
+    $("c-ses-t").textContent = "pin bypassed — bench mode";
+  } else {
+    $("c-ses").className = "chip" + (S.locked ? " err" : " on");
+    $("c-ses-t").textContent = S.locked ? "locked" : "session " + clock(S.left);
+  }
 
   if (S.locked) return;
 
@@ -483,6 +507,7 @@ function render(){
   }).join("") : '<div class="empty">no events</div>';
   $("led-n").textContent = S.log.length + " events";
 
+  renderFinders();
   var d0 = S.drawers[0];
   $("f-stroke").textContent = d0.travel_mm + " mm / " + d0.deg + "°";
   $("f-pulse").textContent = d0.closed_us + "–" + d0.open_us + " µs";
@@ -509,6 +534,7 @@ function buildCal(){
         '" data-id="'+d.id+'" data-k="'+k+'"><output>'+d[k]+' µs</output></div>';
     }).join("");
   }).join("") +
+  '<div id="finders"></div>' +
   '<div class="warnbox">Dragging jogs the drive live. Endpoints commit to flash '+
   'on release. <b>Stop before the drawer strains:</b> the mechanism has 31.4 mm '+
   'of travel at a full 180&deg;, and most SG90 units stall against their own end '+
@@ -525,6 +551,44 @@ function buildCal(){
     };
   });
 }
+/* ── limit finder ────────────────────────────────────────────────────────
+   The ESP32 cannot sense a stall — an SG90 is open loop, no encoder, no
+   shunt — so the machine creeps outward 25us at a time and the operator
+   supplies the single bit the hardware cannot: "that is as far as it goes".
+   Everything after that is automatic: 60us backoff, both ends stored,
+   endpoints applied, travel recomputed, written to flash.               */
+function renderFinders(){
+  var host = $("finders");
+  if (!host) return;
+  host.innerHTML = S.drawers.map(function(d, i){
+    var got = (S.limits || {})[String(d.id)] || {};
+    var btns = d.walking
+      ? '<button class="stop" data-stop="'+d.id+'">Stop — that is the limit</button>'
+      : '<button data-find="'+d.id+'" data-up="0">Find low end</button>' +
+        '<button data-find="'+d.id+'" data-up="1">Find high end</button>';
+    return '<div class="finder">'+
+      '<div class="hdr"><b>Bay 0'+(i+1)+' limits</b><div class="grow"></div>'+
+        (d.walking ? '<span class="live">'+d.us+' µs</span>' : '')+'</div>'+
+      '<div class="btns">'+btns+'</div>'+
+      '<div class="got"><span>low <b>'+(got.low||"—")+'</b></span>'+
+        '<span>high <b>'+(got.high||"—")+'</b></span>'+
+        '<span>in use <b>'+d.closed_us+'–'+d.open_us+'</b></span>'+
+        '<span>travel <b>'+d.travel_mm+' mm</b></span></div></div>';
+  }).join("");
+  [].forEach.call(host.querySelectorAll("[data-find]"), function(b){
+    b.onclick = function(){
+      post("/api/autocal", {id:+b.dataset.find, up:b.dataset.up === "1"})
+        .then(function(){ setTimeout(refresh, 150); });
+    };
+  });
+  [].forEach.call(host.querySelectorAll("[data-stop]"), function(b){
+    b.onclick = function(){
+      post("/api/autocal/mark", {id:+b.dataset.stop})
+        .then(function(){ calBuilt = false; setTimeout(refresh, 200); });
+    };
+  });
+}
+
 $("b-lock").onclick = function(){ post("/api/lock").then(refresh); };
 $("b-clr").onclick = function(){ api("/api/log", {method:"DELETE"}).then(refresh); };
 
@@ -535,7 +599,9 @@ function schedule(){
   /* A drawer mid-stroke wants a fast tick so the elevation tracks it; an idle
      cabinet does not, and the ESP32 has a servo loop to run. */
   var moving = S && S.drawers && S.drawers.some(function(d){ return d.busy; });
-  timer = setTimeout(refresh, moving ? 220 : (S && S.locked ? 2000 : 1000));
+  var walking = S && S.drawers && S.drawers.some(function(d){ return d.walking; });
+  timer = setTimeout(refresh, (moving || walking) ? 220
+                              : (S && S.locked ? 2000 : 1000));
 }
 function refresh(){
   return api("/api/state").then(function(j){

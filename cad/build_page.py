@@ -186,7 +186,7 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     <div class="dim">
       <span class="k-lab">92 &times; 74 &times; 66 mm</span>
       <span class="ln"></span>
-      <span class="k-lab">146 g PLA</span>
+      <span class="k-lab">145 g PLA &middot; ~124 g sliced</span>
     </div>
     <h1>shopkeeper <em>NANO</em></h1>
     <p class="sub">A two-drawer motorised tool cabinet, driven by rack and pinion off
@@ -196,10 +196,10 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     go to the printer &mdash; not computed from the drawing.</p>
     <div class="stats">
       <div class="stat"><b>2</b><span>drawers</span></div>
-      <div class="stat"><b>31.4 mm</b><span>travel</span></div>
+      <div class="stat"><b>31.4 mm</b><span>full travel</span></div>
       <div class="stat"><b>m1.25 &times; 16T</b><span>involute pinion</span></div>
       <div class="stat"><b>0.489 mm</b><span>gear clearance</span></div>
-      <div class="stat"><b>10 parts</b><span>printed</span></div>
+      <div class="stat"><b>9 parts</b><span>unique &middot; 12 printed</span></div>
     </div>
   </header>
 
@@ -207,7 +207,7 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     __VIEWER__
     <div class="cap">
       <span>Drag to orbit &middot; scroll to zoom &middot; the slider drives the real rack-and-pinion kinematics</span>
-      <span class="mono">13,127 triangles &middot; no external assets</span>
+      <span class="mono">13,343 triangles &middot; 17,119 drawn per frame &middot; no external assets</span>
     </div>
   </div>
 
@@ -254,7 +254,7 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     <div class="plates">
       <div class="plate">
         <div class="swatch" style="background:#EDEDF2"></div>
-        <div class="plate-n"><span>Plate 1</span><span>95.0 g</span></div>
+        <div class="plate-n"><span>Plate 1</span><span>89.2 g</span></div>
         <h3>Case, white</h3>
         <p>Lower body and lid. The lid prints top-face-down so the Ommi Forge mark
         forms against the bed &mdash; the crispest surface the machine makes.</p>
@@ -275,14 +275,17 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     <div class="open">
       <div><dt>Servo height</dt><dd>The SG90's horn face is taken as <b>26.5 mm</b>
         from a datasheet, not measured. It sets the pinion height &mdash; so it lives in
-        a <b>1.4 g shim</b>, not in the 95 g case. Wrong number, reprint the shim.</dd></div>
+        a <b>1.6 g shim</b>, not in the 89 g case. Wrong number, reprint the shim.</dd></div>
       <div><dt>Servo sweep</dt><dd>Full travel needs <b>180.0&deg;</b> of an SG90's
-        nominal 180&deg;. Clones give 160&ndash;175&deg;, so command &plusmn;80&deg; and take
-        <b>27.9 mm</b> of the 31.4 available. Firmware, not geometry.</dd></div>
+        nominal 180&deg;. Clones give 160&ndash;175&deg;, so the shipped firmware commands
+        650&ndash;2350 &micro;s &mdash; <b>153&deg;</b> &mdash; and takes <b>26.7 mm</b> of the
+        31.4 available, leaving <b>4.72 mm</b> in reserve. Firmware, not geometry.</dd></div>
       <div><dt>Case fasteners</dt><dd>The halves are held by <b>three pins</b> and
         nothing else. Fine on a desk; a transport lock or four M3 would be better in a bag.</dd></div>
-      <div><dt>Firmware</dt><dd>Not written. The ESP32-S3 and breadboard are in the
-        bay and the mounts are verified, but nothing drives the servos yet.</dd></div>
+      <div><dt>Servo endpoints</dt><dd>The firmware is written and runs on the bench
+        board &mdash; PIN gate, append-only log, live calibration &mdash; but the
+        <b>650&ndash;2350 &micro;s</b> endpoints are a deliberately conservative default,
+        not a measurement. They get set by eye against the printed drawer.</dd></div>
     </div>
   </section>
 

@@ -252,8 +252,18 @@ fit("pinion in the deck clearance bore", 2*r_tip, pbore, "free", "gear must neve
 
 # ── 7. SERVO -> CRADLE ─────────────────────────────────────────────────
 sy_ = P["wall"] + NA.PIN_Y
-poc_x = void(case_lo, [px, sy_, NA.SG_BASE + 4.0], [1, 0, 0])
-poc_y = void(case_lo, [px, sy_, NA.SG_BASE + 4.0], [0, 1, 0])
+# Measure at the pocket's OWN centre (bcx), not the pinion axis - they are 5.5
+# apart now that the shaft offset is modelled. And step clear of the cable
+# notch: it deliberately removes 6 mm of the -Y wall so the servo lead can get
+# out, and a ray through it reads the pocket as 24 mm wide when it is 12.9.
+bcx = NA.sg_body_cx(0, px)
+notch_x = (bcx - 11.0, bcx - 5.0)
+probe_x = bcx + 7.0                     # inside the pocket, clear of the notch
+poc_x = void(case_lo, [probe_x, sy_, NA.SG_BASE + 4.0], [1, 0, 0])
+poc_y = void(case_lo, [probe_x, sy_, NA.SG_BASE + 4.0], [0, 1, 0])
+raw("servo cable notch stays clear of the probe",
+    min(abs(probe_x - notch_x[0]), abs(probe_x - notch_x[1])), 1.0, 99.0,
+    "the notch is intentional; the measurement just must not sit in it")
 fit("SG90 body in its pocket, length", P["sg_l"], poc_x, "dropin",
     "bought part: pocket shrinks, servo does not grow", male_printed=False)
 fit("SG90 body in its pocket, width",  P["sg_w"], poc_y, "dropin",

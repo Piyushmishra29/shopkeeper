@@ -46,6 +46,9 @@ class Servo:
         self.cycles = 0            # completed opens, for the maintenance readout
         Pin(self.pin, Pin.OUT).value(0)   # defined from the very first moment
         self.pos = 0.0             # 0..1 through the stroke, live during a move
+        self.walking = False       # a limit search is in progress
+        self.walk_stop = False
+        self.walk_hit = None
         self._detach_task = None
 
     # ── low level ─────────────────────────────────────────────────────────
@@ -128,6 +131,52 @@ class Servo:
         asyncio.create_task(self._settle_then_detach())
         return True
 
+    async def walk(self, up, step=25, dwell_ms=240, lo=500, hi=2500):
+        """Creep outward from centre until told to stop.
+
+        This is how the limits get found. The ESP32 cannot sense a stall - an
+        SG90 is open loop, there is no encoder and no shunt - so the machine
+        drives the search and a human supplies the one bit of information the
+        hardware physically cannot: "that is as far as it goes". Everything
+        after that (backoff, travel, sweep angle, persistence) is automatic.
+
+        Deliberately slow: 25 us a step with a 240 ms dwell is about 2 deg per
+        third of a second, which is slow enough to hear the motor change note
+        before any damage is done."""
+        if self.busy or self.walking:
+            return False
+        self.busy = True
+        self.walking = True
+        self.walk_stop = False
+        self.walk_hit = None
+        try:
+            us = 1500
+            self._write_us(us)
+            await asyncio.sleep_ms(500)
+            while not self.walk_stop:
+                us = us + step if up else us - step
+                if us > hi or us < lo:
+                    self.walk_hit = hi if up else lo      # hit the electrical end
+                    break
+                self._write_us(us)
+                await asyncio.sleep_ms(dwell_ms)
+            if self.walk_hit is None:
+                self.walk_hit = int(self._us)
+        finally:
+            self.walking = False
+            self.busy = False
+        asyncio.create_task(self._settle_then_detach())
+        return True
+
+    def mark(self, backoff=60):
+        """Stop the walk and take the current position as the limit, minus a
+        safety backoff so the servo never sits on its own end stop."""
+        if not self.walking:
+            return None
+        self.walk_stop = True
+        raw = int(self._us)
+        return raw - backoff if raw > 1500 else raw + backoff
+
     async def jog(self, us):
         """Hold one raw pulse width. Calibration only - this is the mode that
         can drive the mechanism into its own end stop, so the UI keeps it
@@ -156,8 +205,9 @@ class Servo:
         """Millimetres the drawer actually moves for the commanded span.
 
         180 deg of the m1.25 x 16T pinion is pi * 10.0 = 31.42 mm. The default
-        endpoints ask for 160, so 27.9 - which is why the drawer does not come
-        all the way out and that is deliberate."""
+        endpoints are 650..2350, a span of 1700 us out of the 2000 us that maps
+        to 180 deg - so 153 deg, so 26.7 mm. The remaining 4.7 mm is why the
+        drawer does not come all the way out, and that is deliberate."""
         span = abs(self.open_us - self.closed_us)
         return 31.416 * (span / 2000.0)
 
@@ -172,4 +222,5 @@ class Servo:
             "pos": round(self.pos, 3),
             "us": int(self._us),
             "deg": round(abs(self.open_us - self.closed_us) / 2000.0 * 180, 1),
+            "walking": self.walking,
         }

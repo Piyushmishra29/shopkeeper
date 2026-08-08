@@ -345,9 +345,13 @@ BLURB = {
  "case_lower": "mech bay, open top &mdash; servos, pinions, ESP32",
  "case_upper": "drawer bay + top face, printed upside down",
  "deck":       "2.5 mm plate the drawers ride on, slotted for both fins",
- "drawer":     "42 &times; 55 &times; 18 bin, scalloped finger pull",
+ "drawer":     "%.1f &times; %.0f &times; %.0f bin, scalloped finger pull"
+               % (DR_W, DR_D, P["dr_h"]),
  "rack":       "toothed blade, pegs through the drawer floor",
- "pinion":     "m1.25 &times; 12T, bolts to the SG90 horn",
+ # module and tooth count are templated out of nano.py's P dict, never typed:
+ # this row read "m1.25 &times; 12T" for a pinion that has had 16 teeth for as
+ # long as the STLs have existed.
+ "pinion":     "m__MODULE__ &times; __TEETH__T, bolts to the SG90 horn",
  "servo_shim": "sets the servo height &mdash; reprint this, not the case",
  "knob":       "optional press-fit pull &mdash; unused with the scalloped cut",
  "servo":      "SG90, bought &mdash; drives one drawer through its pinion",
@@ -373,7 +377,32 @@ DATA = {
 
 # ────────────────────────────────────────────────────────────────────────────
 # 4.  Emit
+#
+# Every number in the prose below is a template token filled from the geometry,
+# never a literal. The copy used to say "m1.25 x 12T" and "one turn" for a
+# 16-tooth pinion whose full stroke is half a turn; both were true of an early
+# gear and neither had any way of noticing when the gear changed. Derive them
+# and a gear change rewrites the sentence instead of quietly falsifying it.
 # ────────────────────────────────────────────────────────────────────────────
+# TRAVEL is a rack displacement; TRAVEL / R_P is the pinion angle that produces
+# it. At m1.25 x 16T, R_P = 10.0 and pi * 10.0 = 31.42 mm = 180 deg exactly.
+PIN_TURN_DEG = math.degrees(TRAVEL / R_P)
+if abs(PIN_TURN_DEG - 180.0) < 0.5:
+    PIN_TURN = "exactly half a turn"
+elif abs(PIN_TURN_DEG - 360.0) < 0.5:
+    PIN_TURN = "one full turn"
+else:
+    PIN_TURN = f"{PIN_TURN_DEG:.0f}&deg;"
+print(f"  pinion m{M:g} x {N}T, pitch radius {R_P:.1f} -> full stroke "
+      f"{TRAVEL:.2f} mm = {PIN_TURN_DEG:.1f} deg ({PIN_TURN})")
+
+# Triangle budget, counted off the payload rather than written down. tris[] is
+# per unique mesh; INST is what is actually drawn, and the knob is exploded-only
+# (show == 1), so the assembled frame is the cheaper of the two counts.
+TRI_UNIQUE = sum(tris.values())
+TRI_FRAME  = sum(tris[i["p"]] for i in INST if i["show"] == 0)
+TRI_EXPL   = sum(tris[i["p"]] for i in INST)
+
 rows = []
 for n in NAMES + EXTRA:
     rows.append(
@@ -464,6 +493,9 @@ CSS = r"""
 .v3d-tot b { color:var(--text-primary,#1d1d1f); font-variant-numeric:tabular-nums; }
 .v3d-note { font-size:.68rem; line-height:1.55; margin:.7rem 0 0;
             color:var(--text-tertiary,#aeaeb2); }
+.v3d-cap { font-size:.66rem; line-height:1.5; margin:.55rem 0 0;
+           letter-spacing:.02em; color:var(--text-tertiary,#aeaeb2);
+           font-variant-numeric:tabular-nums; }
 
 @media (max-width:820px){
   .v3d-main { flex-direction:column; }
@@ -481,7 +513,7 @@ BODY = r"""
     The poses are the ones <code>nano.py</code> uses for its boolean interference
     sweep, so what you are orbiting is exactly what was checked. Drag to orbit,
     scroll to zoom, and run the drawers out their full __TRAVEL__ mm of stroke &mdash;
-    one turn of a 12&#8209;tooth pinion.</p>
+    __PINTURN__ of a __TEETH__&#8209;tooth pinion.</p>
 
   <div class="v3d-bar">
     <div class="v3d-seg" id="v3d-seg">
@@ -510,6 +542,8 @@ BODY = r"""
       </ul>
       <div class="v3d-tot"><span>build total, knobs excluded</span><b>__TOTAL__ g solid</b></div>
       <div class="v3d-tot"><span>&approx; sliced</span><b>__SLICED__ g</b></div>
+      <p class="v3d-cap">__TRIU__ triangles unique &middot; __TRIF__ drawn per frame
+        assembled, __TRIE__ exploded &middot; no external assets</p>
       <p class="v3d-note">White is plate 1, yellow plate 2 &mdash; one colour per plate,
         zero filament changes. Hover a row to isolate that part.
         Closed, the drawer face sits __YCLOSED__&nbsp;mm inside the mouth; open, it stands
@@ -1069,14 +1103,30 @@ requestAnimationFrame(tick);
 </script>
 """
 
-html = (CSS
-        + BODY.replace("__TRAVEL__", f"{TRAVEL:.2f}")
-              .replace("__DIMS__", f"{CW:.0f} &times; {CD:.0f} &times; {CH:.0f}")
-              .replace("__YCLOSED__", f"{Y_CLOSED:.1f}")
-              .replace("__ROWS__", ROWS)
-              .replace("__TOTAL__", f"{TOTAL:.0f}")
-              .replace("__SLICED__", f"{TOTAL*0.85:.0f}")
-        + JS.replace("__DATA__", json.dumps(DATA, separators=(",", ":"))))
+# __ROWS__ goes in FIRST: the part blurbs carry tokens of their own (the pinion
+# row is templated on module and tooth count), and a token pasted in after its
+# own substitution has run is a token that ships to the browser.
+TOKENS = {
+    "__ROWS__":   ROWS,
+    "__TRAVEL__": f"{TRAVEL:.2f}",
+    "__DIMS__":   f"{CW:.0f} &times; {CD:.0f} &times; {CH:.0f}",
+    "__YCLOSED__": f"{Y_CLOSED:.1f}",
+    "__TOTAL__":  f"{TOTAL:.0f}",
+    "__SLICED__": f"{TOTAL*0.85:.0f}",
+    "__MODULE__": f"{M:g}",
+    "__TEETH__":  f"{N:d}",
+    "__PINTURN__": PIN_TURN,
+    "__TRIU__":   f"{TRI_UNIQUE:,}",
+    "__TRIF__":   f"{TRI_FRAME:,}",
+    "__TRIE__":   f"{TRI_EXPL:,}",
+}
+body = BODY
+for _tok, _val in TOKENS.items():
+    body = body.replace(_tok, _val)
+left = [t for t in TOKENS if t in body]
+assert not left, f"unsubstituted template tokens reached the page: {left}"
+
+html = CSS + body + JS.replace("__DATA__", json.dumps(DATA, separators=(",", ":")))
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", encoding="utf-8") as fh:
@@ -1157,16 +1207,20 @@ txt = open(OUT, encoding="utf-8").read()
 bad = [s for s in ("http://", "https://", "//cdn", "src=", "@import", "fetch(",
                    "XMLHttpRequest", "importScripts") if s in txt]
 missing = [n for n in NAMES + EXTRA if f'"{n}"' not in txt]
+# The prose has to agree with the geometry it is describing, so assert the
+# rendered strings rather than trusting that the templating ran.
+prose = [s for s in (f"m{M:g} &times; {N:d}T", f"{N:d}&#8209;tooth",
+                     f"{TRI_UNIQUE:,} triangles unique", f"{TRI_FRAME:,} drawn per frame")
+         if s not in txt]
 print(f"\n  wrote {OUT}")
 print(f"  {sz/1024:.1f} KiB ({sz} bytes)")
 print(f"  external references: {bad if bad else 'none'}")
 print(f"  parts missing from the payload: {missing if missing else 'none'}")
+print(f"  prose out of step with the geometry: {prose if prose else 'none'}")
 print(f"  triangles: " + ", ".join(f"{n}={tris[n]}" for n in NAMES + EXTRA)
-      + f"   total unique={sum(tris.values())}")
-per_frame = sum(tris[i['p']] for i in INST if i['show'] == 0)
-print(f"  drawn per frame: {per_frame} assembled, "
-      f"{sum(tris[i['p']] for i in INST)} exploded")
+      + f"   total unique={TRI_UNIQUE}")
+print(f"  drawn per frame: {TRI_FRAME} assembled, {TRI_EXPL} exploded")
 print(f"  build total {TOTAL:.1f} g solid")
-if bad or missing or sz < 40000 or not MESH_OK:
+if bad or missing or prose or sz < 40000 or not MESH_OK:
     sys.exit("VERIFY FAILED")
 print("  OK")

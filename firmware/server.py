@@ -32,10 +32,14 @@ class App:
         self.unlocked_at = 0
         self.boot_at = time.time()
         self.net = "-"
+        self.limits = {}      # {drawer_id: {"low": us, "high": us}}
+        self.cal_dir = {}     # which end each drawer is currently searching
 
     # ── access ────────────────────────────────────────────────────────────
     @property
     def locked(self):
+        if not getattr(config, "REQUIRE_PIN", True):
+            return False                      # bench mode
         if self.unlocked_at == 0:
             return True
         return time.time() - self.unlocked_at > config.PIN_TIMEOUT_S
@@ -60,6 +64,7 @@ class App:
     def state(self):
         return {
             "unit": config.UNIT, "fw": config.FW, "site": config.SITE,
+            "bypass": not getattr(config, "REQUIRE_PIN", True),
             "net": self.net,
             "locked": self.locked,
             "timeout": config.PIN_TIMEOUT_S,
@@ -70,6 +75,7 @@ class App:
             "drawers": [dict(d.state(), tools=store.tools_for(d.id))
                         for d in self.drawers],
             "log": self.log.entries[:24],
+            "limits": {str(k): v for k, v in self.limits.items()},
         }
 
 
@@ -191,6 +197,39 @@ async def handle(app, r, w):
             # inside a display, and it fails at IMPORT time, not on this line
             st = d.state()
             st["ok"] = True
+            return await _send(w, "200 OK", _json(app, st))
+
+        # ── guided limit search ───────────────────────────────────────────
+        if path == "/api/autocal" and method == "POST":
+            d = app.by_id.get(int(body.get("id", -1)))
+            if d is None:
+                return await _send(w, "404 Not Found", _json(app, {"ok": False}))
+            up = bool(body.get("up"))
+            asyncio.create_task(d.walk(up))
+            app.cal_dir[d.id] = "high" if up else "low"
+            return await _send(w, "202 Accepted", _json(app, {"ok": True}))
+
+        if path == "/api/autocal/mark" and method == "POST":
+            d = app.by_id.get(int(body.get("id", -1)))
+            if d is None or not d.walking:
+                return await _send(w, "409 Conflict",
+                                   _json(app, {"ok": False, "error": "not searching"}))
+            limit = d.mark()
+            side = app.cal_dir.get(d.id)
+            app.limits.setdefault(d.id, {})[side] = limit
+            got = app.limits[d.id]
+            # once both ends are known the machine sets itself up: the endpoint
+            # nearer the mechanism's closed position is whichever the operator
+            # found first is NOT assumed - both are stored and the wider span
+            # is applied, direction left to the drawer's own config
+            if "low" in got and "high" in got:
+                d.calibrate(got["low"], got["high"])
+                store.save_cal(app.drawers)
+                app.log.add("CALIBRATED", d.id,
+                            "{}..{} us".format(d.closed_us, d.open_us))
+            st = d.state()
+            st["ok"] = True
+            st["limits"] = got
             return await _send(w, "200 OK", _json(app, st))
 
         if path == "/api/log" and method == "DELETE":

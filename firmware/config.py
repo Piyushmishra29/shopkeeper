@@ -16,7 +16,14 @@ AP_PASSWORD = "forge2026"          # >= 8 chars or the ESP refuses to start the 
 # Joining the house network first means the cabinet is reachable from a laptop
 # that is also on the internet. Falls back to its own AP if the join fails, so
 # the meeting-room case still works.
-JOIN        = ("Pi2.4", "81481187")
+#
+# CREDENTIALS DO NOT LIVE IN THIS FILE. This is a public repository and a real
+# SSID and password were committed here once already. secrets.py is gitignored;
+# copy secrets_example.py to secrets.py and put them there.
+try:
+    from secrets import JOIN
+except ImportError:
+    JOIN = None                    # no secrets.py -> AP mode only, which is safe
 JOIN_TIMEOUT_S = 12
 
 # ── servos ─────────────────────────────────────────────────────────────────
@@ -54,6 +61,12 @@ DETACH_AFTER_MS = 450
 # not weigh, photograph or RFID anything - inventory is trust-based, and what
 # is actually sold is controlled access plus a record of who opened what. So
 # that is what this implements.
+# Set False to bypass the lock entirely while working on the bench. The access
+# control IS the product - it is the whole argument against ZOLLER - so this is
+# a development switch, not a feature. The terminal shows a loud BYPASSED chip
+# whenever it is off, because demonstrating this cabinet with its lock disabled
+# would undo the pitch in one sentence.
+REQUIRE_PIN = False
 PIN         = "2468"
 PIN_TIMEOUT_S = 120        # re-lock after this long with no activity
 LOG_MAX     = 60           # entries kept in RAM and mirrored to /data/log.json
