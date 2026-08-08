@@ -320,9 +320,13 @@ def case_upper():
     # the mark is 7 disjoint shapes and extrude_polygon takes ONE polygon
     cut = []
     for poly in (list(g.geoms) if hasattr(g, "geoms") else [g]):
-        e = extrude_polygon(poly, 1.6)   # must break the top surface, not stop under it
-        e.apply_translation([0, 0, H - 1.1])
+        e = extrude_polygon(poly, 2.2)   # must break the top surface
+        e.apply_translation([0, 0, H - 1.4])
         cut.append(e)
+    # 0.4 relief across the whole mark at the pocket floor: the inlay's shapes
+    # are tied together by a web down there, hidden once it is seated
+    b = g.bounds
+    cut.append(blk(b[0]-0.4, b[2]+0.4, b[1]-0.4, b[3]+0.4, H-1.4, H-1.0))
     m = diff(m, union(cut))
     return chamfer(m)
 
@@ -373,6 +377,30 @@ def rack(assembly=True):
         m.apply_translation(-m.bounds[0])
     return m
 
+def logo_inlay():
+    """The mark in WHITE, pressed into the black case's recess.
+
+    1.2 tall in a 1.0 recess, so it stands 0.2 proud - embossed, in a second
+    colour, with no filament change and no purge tower. Outline shrunk 0.15
+    per side so it drops in rather than needing force."""
+    g = _logo_trace()[0]
+    LH = 11.0
+    g = _sc(g, LH/0.772, LH/0.772, origin=(0, 0))
+    b = g.bounds
+    # hidden web ties the seven shapes into one handleable piece
+    parts = [blk(b[0]-0.25, b[2]+0.25, b[1]-0.25, b[3]+0.25, 0, 0.4)]
+    for poly in (list(g.geoms) if hasattr(g, "geoms") else [g]):
+        sh = poly.buffer(-0.15)
+        if sh.is_empty:
+            continue
+        for q in (list(sh.geoms) if hasattr(sh, "geoms") else [sh]):
+            e = extrude_polygon(q, 1.2)
+            e.apply_translation([0, 0, 0.4])
+            parts.append(e)
+    m = union(parts)
+    m.apply_translation(-m.bounds[0])
+    return m
+
 def knob():
     """Turned profile, revolved. Prints face-down: the flat outer face is the
     whole bed contact, and every upward surface is under 50 deg."""
@@ -399,7 +427,8 @@ parts={"case_lower":rep("case_lower",case_lower()),
        "case_upper":rep("case_upper",case_upper()),
        "drawer":rep("drawer",drawer()),
        "rack":rep("rack",rack(assembly=False)),
-       "knob":rep("knob",knob()),"pinion":rep("pinion",pinion())}
+       "knob":rep("knob",knob()),
+       "logo_inlay":rep("logo_inlay",logo_inlay()),"pinion":rep("pinion",pinion())}
 
 FLIP={"case_upper"}          # printed top-face-down
 
@@ -573,6 +602,33 @@ assert aw<=BED and ah<=BED, f"combined plate {aw:.0f}x{ah:.0f} exceeds bed"
 # Two separate single-colour files. A multi-plate 3MF was tried and Bambu did
 # not bin the objects into separate plates - they all landed in one scene and
 # overlapped. Open one file, slice, swap the spool, open the other.
+# ── ONE PLATE, everything on it ──
+# Case parts on the left, the yellow interiors on the right, the white logo
+# inlay tucked in beside them. Three colours means two swaps if you print it
+# as one job - or hide what you are not running and do it in passes.
+ALL = [("case_lower",1), ("case_upper",1), ("logo_inlay",1),
+       ("deck",1), ("drawer",2), ("rack",2), ("pinion",2)]
+placed, x, y, row = [], 6.0, 6.0, 0.0
+for nm, q in ALL:
+    mm = print_pose(nm)
+    for k in range(q):
+        if x + mm.extents[0] > BED - 6:
+            x = 6.0; y += row + 6.0; row = 0.0
+        placed.append((nm if q == 1 else f"{nm}_{chr(65+k)}", mm, x, y))
+        x += mm.extents[0] + 5; row = max(row, mm.extents[1])
+aw = max(px + m.extents[0] for _, m, px, _ in placed)
+ah = max(py + m.extents[1] for _, m, _, py in placed)
+assert aw <= BED and ah <= BED, f"one-plate layout {aw:.0f}x{ah:.0f} exceeds the bed"
+pall = os.path.join(PL, "plate_ALL.3mf")
+write_3mf(pall, placed)
+merged = trimesh.util.concatenate([T(m.copy(), px, py, 0) for _, m, px, py in placed])
+merged.export(os.path.join(PL, "plate_ALL.stl"))
+gall = sum(m.volume/1000*1.24 for _, m, _, _ in placed)
+print(f"\n  plate_ALL          {aw:5.0f} x {ah:3.0f} mm   {gall:5.1f} g   "
+      f"{len(placed)} objects  (everything, one plate)")
+for nm, m, px, py in placed:
+    print(f"      {nm:14s} at ({px:5.1f},{py:5.1f})")
+
 print(f"\n  2 print plates, {total:.0f} g solid (~{total*0.85:.0f} g sliced), "
       f"ZERO filament changes")
 print(f"  {os.path.normpath(PL)}")
