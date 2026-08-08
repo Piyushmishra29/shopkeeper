@@ -410,6 +410,27 @@ for lab,col,items in PLATES:
     print(f"\n  plate_{lab:9s} {w:5.0f} x {h:3.0f} mm   {g:5.1f} g   "
           f"{len(placed)} objects  ok={o==b}")
     for n,m,_,_ in placed: print(f"      {n}")
-print(f"\n  2 plates, {total:.0f} g solid (~{total*0.85:.0f} g sliced), "
+# combined view: everything on one plate, colour-coded, for looking at the
+# whole product in one file. Print from the two single-colour plates above -
+# this one would cost a filament change.
+ALL=[("case_lower",1,0),("case_upper",1,0),("deck",1,1),("drawer",2,1),
+     ("rack",2,1),("pinion",2,1)]
+placed,x,y,row=[],6.0,6.0,0.0
+for nm,q,ci in ALL:
+    mm=print_pose(nm)
+    for k in range(q):
+        if x+mm.extents[0]>BED-6: x=6.0; y+=row+6.0; row=0.0
+        placed.append((nm if q==1 else f"{nm}_{chr(65+k)}",mm,x,y,ci))
+        x+=mm.extents[0]+5; row=max(row,mm.extents[1])
+aw=max(px+m.extents[0] for _,m,px,_,_ in placed)
+ah=max(py+m.extents[1] for _,m,_,py,_ in placed)
+assert aw<=BED and ah<=BED, f"combined plate {aw:.0f}x{ah:.0f} exceeds bed"
+pa=os.path.join(PL,"plate_ALL.3mf")
+write_3mf(pa,placed,materials=[("white","#F2F2F2FF"),("yellow","#F2B705FF")])
+o,b=verify(pa)
+print(f"\n  plate_ALL         {aw:5.0f} x {ah:3.0f} mm   {total:5.1f} g   "
+      f"{len(placed)} objects  ok={o==b}   (viewing only)")
+
+print(f"\n  2 print plates, {total:.0f} g solid (~{total*0.85:.0f} g sliced), "
       f"ZERO filament changes")
 print(f"  {os.path.normpath(PL)}")
