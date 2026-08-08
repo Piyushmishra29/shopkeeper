@@ -203,7 +203,9 @@ def case_upper():
         x0,x1=dx-P["side_clear"]*0.5,dx+DR_W+P["side_clear"]*0.5
         m=diff(m,blk(x0,x1,-1,WL+1,-1,mouth_top))
         # 45 deg relief above the mouth so the flipped print self-supports
-        w=blk(x0,x1,-4,4,-4,4)
+        # blk() already places the box; build it centred on the origin or the
+        # T() below shifts it a second time and it lands on the mullion
+        w=blk(-(x1-x0)/2,(x1-x0)/2,-1.4,1.4,-1.4,1.4)
         w.apply_transform(trimesh.transformations.rotation_matrix(
             math.radians(45),[1,0,0]))
         m=diff(m,T(w,(x0+x1)/2,WL/2,mouth_top))
@@ -354,6 +356,10 @@ chk("the two servos do not clash",
     f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
 chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-WL-2:.1f}")
 chk("all watertight",all(m.is_watertight for m in parts.values()),"")
+for n,m in parts.items():
+    nb=len(m.split(only_watertight=False))
+    chk(f"{n} is one solid piece",nb==1,
+        f"{nb} bodies" + ("" if nb==1 else "  <-- something is detached"))
 for n,m in parts.items():
     r=bed_ratio(m,n)
     # a part shorter than its own footprint cannot topple however it is pocketed,
