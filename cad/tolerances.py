@@ -66,8 +66,12 @@ fit("rack blade in floor slot", FIN_SPAN, FIN_SPAN + 0.5, 0.08, 0.20,
     "location", "rack is glued/pegged, not sliding")
 
 # ── press and location fits ───────────────────────────────────────────
-fit("pinion bore on SG90 spline", P["sg_spline"], P["sg_spline"] + 0.35,
-    -0.10, 0.05, "press", "drives the whole load")
+# spline is abandoned: 20 teeth on a 4.8 dia = 0.75 mm pitch, far under what a
+# 0.4 nozzle resolves. Drive is through the servo horn, bolted.
+fit("pinion recess on horn boss", 7.0, 8.4, 0.30, 0.90, "clearance",
+    "horn is bolted, not pressed")
+fit("pinion screw hole for M2", 2.0, 1.9, -0.10, 0.05, "thread",
+    "M2 cuts its own thread in PETG")
 fit("rack peg in drawer floor", P["peg"], P["peg"] + 0.25, 0.08, 0.20,
     "location", "pegged then glued")
 

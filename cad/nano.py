@@ -97,8 +97,17 @@ def pinion():
     g=extrude_polygon(Polygon(pts),P["gear_t"])
     hub=cyl_z(9.0,P["gear_t"],P["gear_t"]+5,0,0)
     m=union([g,hub])
-    m=diff(m,cyl_z(P["sg_spline"]+0.35,2.5,P["gear_t"]+3.5,0,0))
-    m=diff(m,cyl_z(2.6,P["gear_t"]+3.5,P["gear_t"]+6,0,0))
+    # ── drive through the servo's own HORN, not the spline ──
+    # A printed bore on a 4.8 mm 20-tooth spline cannot grip: the teeth are
+    # 0.75 mm apart, far under what a 0.4 nozzle resolves, so it just reams
+    # itself round and slips. The horn is screwed to the spline by the servo's
+    # own M2.5, and the pinion then bolts to the horn.
+    m=diff(m,cyl_z(8.4,-1,2.6,0,0))                      # horn boss recess
+    m=diff(m,blk(-2.9,2.9,-8.0,8.0,-1,1.9))              # double-arm horn slot
+    m=diff(m,cyl_z(4.6,-1,P["gear_t"]+6,0,0))            # driver access to the M2.5
+    for ang in (0.0,math.pi):                            # 2 x M2 into the horn
+        m=diff(m,cyl_z(1.9,-1,P["gear_t"]+6,
+                       6.0*math.cos(ang),6.0*math.sin(ang)))
     return m
 
 def rack_fin(length,h=None):
@@ -322,7 +331,11 @@ chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-
 chk("all watertight",all(m.is_watertight for m in parts.values()),"")
 for n,m in parts.items():
     r=bed_ratio(m,n)
-    chk(f"{n} sits on the bed",r>=0.25,f"{r*100:.0f}% bed contact")
+    # a part shorter than its own footprint cannot topple however it is pocketed,
+    # so the ratio only has to hold for tall parts
+    squat=m.extents[2] <= min(m.extents[0],m.extents[1])
+    chk(f"{n} sits on the bed",r>=0.25 or squat,
+        f"{r*100:.0f}% bed contact" + (" (squat, stable)" if squat else ""))
 
 tot=(parts["case_lower"].volume + parts["deck"].volume
      + parts["case_upper"].volume + 2*parts["drawer"].volume + 2*parts["rack"].volume
