@@ -205,7 +205,13 @@ fit("rack blade in deck slot", blade_w, dslot, "running",
     "must also absorb the drawer's side play")
 
 # ── 4. DRAWER -> CASE ──────────────────────────────────────────────────
-dw, dh = drawer.extents[0], drawer.extents[2]
+dw = drawer.extents[0]
+# Height AT THE FRONT, not overall. The anti-tip rib stands 3 mm proud of the
+# rear wall and never passes through the mouth - taking the overall height
+# reports a drawer that demonstrably sweeps the full stroke as 1.7 mm too tall.
+dv = drawer.vertices
+dh = float(dv[dv[:, 1] < NA.DR_D - P["dr_wall"] - 1.0][:, 2].max())
+dh_rib = float(drawer.extents[2])
 mouth_w = void(case_up, [NA.DR_X[0] + NA.DR_W/2, 1.0, 9.0], [1, 0, 0])
 fit("drawer in its mouth, width", dw, mouth_w, "running", "left-right rattle")
 # Vertical is not a symmetric fit: the drawer RESTS on the deck, so all the
@@ -214,7 +220,9 @@ mouth_top = NA.DR_TOP + P["gap"] - NA.DECK
 raw("headroom above the drawer, at the mouth", mouth_top - (0.2 + dh), 0.30, 2.50,
     "drawer sits on the deck; all clearance is on top")
 raw("headroom above the drawer, in the bay", (NA.CH - NA.DECK - NA.WL) - (0.2 + dh),
-    0.30, 6.00, "less is better - it is what lets an open drawer tip")
+    0.30, 6.00, "body only")
+raw("headroom above the ANTI-TIP RIB", (NA.CH - NA.DECK - NA.WL) - (0.2 + dh_rib),
+    0.30, 1.50, "this is the number that limits nose droop - small is the point")
 
 # ── 5. PINION -> RACK (the gear pair) ──────────────────────────────────
 r_tip = float(np.max(np.linalg.norm(pinion.vertices[:, :2], axis=1)))

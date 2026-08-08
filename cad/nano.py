@@ -56,7 +56,12 @@ P = dict(
     # and an involute pinion stay conjugate at any centre distance.
     cd_bias=0.15,
     clear=0.35, gap=1.5,
-    dr_d=55.0,
+    # 59, not 55. The drawer used to stop 4 mm inside the case, which on a
+    # sales piece reads as a part that does not fit, and put the moulded finger
+    # pull out of reach - so there was no manual override if a servo died. The
+    # extra 4 mm is all on the FRONT: the rear face lands at y=59 either way,
+    # so the case bay is untouched and case_lower/case_upper do not change.
+    dr_d=59.0,
     esp_h=27.0,              # ESP32-S3 on its breadboard, pins connected
     pull="cut",              # "cut" = scalloped finger pull, "knob" = press-fit knob
 )
@@ -185,6 +190,16 @@ def pinion():
                                  (3.6,-3.0),(2.4,-20),(-2.4,-20),(-3.6,-3.0)]),3.1)
     m=diff(m,T(arm,0,0,-1))
     m=diff(m,cyl_z(4.6,-1,P["gear_t"]+1,0,0))            # driver reaches the M2.5
+    # ── retention. Nothing used to hold the pinion down. ──
+    # It sat on the horn arms and lifted straight off, so the one part that
+    # transmits all the drive was held by gravity. These two M2 clearance holes
+    # drop through the 3.9 mm of gear above the arm slot and into the horn's
+    # own arm holes, clamping the pinion to the horn. They sit at r 6.0, inside
+    # the root circle (8.44) and outside the driver bore, so no tooth is
+    # touched; and they land within the slot's width, so they open into it
+    # rather than into solid gear.
+    for hy in (-6.0, 6.0):
+        m=diff(m,cyl_z(2.2, 2.0, P["gear_t"]+1, 0, hy))
     # The 5 mm hub is gone. With the deck raised it would have run into the
     # drawer floor, and a 6 mm face needs no help standing up.
     return m
@@ -454,6 +469,35 @@ def case_upper():
     m = diff(m, union(cut))
     return chamfer(m)
 
+ANTITIP = 3.0         # rear wall stands this proud, to catch the bay ceiling
+POST_DX, POST_W = (-16.0, 16.0), 2.0   # OLED posts hanging from the bay ceiling
+
+def post_bands():
+    """Local-x bands on a drawer that the OLED posts hang into.
+
+    The posts drop to 3 mm above the drawer, so an anti-tip rib has to step
+    around them. Derived from the SAME constant case_upper builds them from -
+    hardcoding the gaps is how two parts drift apart. Both drawers use one
+    part, so the bands from BOTH bays are merged."""
+    out = []
+    for dx in DR_X:
+        for ddx in POST_DX:
+            x0 = CW/2 + ddx - POST_W - dx - 0.8
+            x1 = CW/2 + ddx + POST_W - dx + 0.8
+            if x1 > 0 and x0 < DR_W:
+                out.append((max(0.0, x0), min(DR_W, x1)))
+    return sorted(out)
+
+def rib_segments():
+    """The complement of post_bands() across the drawer's width."""
+    segs, x = [], 0.0
+    for b0, b1 in post_bands():
+        if b0 - x > 2.0:
+            segs.append((x, b0))
+        x = max(x, b1)
+    if DR_W - x > 2.0:
+        segs.append((x, DR_W))
+    return segs
 RACK_L  = DR_D-6      # rack now runs nearly the full drawer
 RACK_Y0 = 3.0              # rack start in drawer-part Y
 PEG_D   = 3.0
@@ -498,6 +542,20 @@ def drawer():
         # it is self-supporting - the void widens as the print rises.
         m=diff(m,cyl_x(14.0,W/2-9,W/2+9,1.5,H))
         m=diff(m,blk(W/2-9,W/2+9,-1,P["dr_front"]+0.5,H-1.2,H+1))
+    # ── ANTI-TIP, and it lives on the DRAWER, not the case ──
+    # An extended drawer has nothing holding it down: the rack is free to pitch
+    # in the deck slot, so the drawer can rotate nose-down until its rear
+    # corner finds the bay ceiling 3.8 mm above. That was a 5.1 mm nose droop -
+    # enough to walk a tooth out of mesh.
+    # The fix wants to be a rib on the bay wall, but the case is already on the
+    # printer. Standing the REAR wall 3 mm proud does the same job from the
+    # other side, against the ceiling that is already there: the rear corner
+    # now has 0.8 mm to rise instead of 3.8. It stays clear of the mouth
+    # because it is at the rear and the mouth is 24 mm ahead of it at full
+    # travel, and the drawers are placed on the deck before the lid goes on,
+    # so nothing has to pass through the mouth to assemble.
+    for rx0, rx1 in rib_segments():
+        m=union([m,blk(rx0,rx1,y0+D-P["dr_wall"],y0+D,H,H+ANTITIP)])
     return m
 
 def rack(assembly=True):
@@ -617,8 +675,8 @@ def chk(l,c,d):
     if not c: fails.append(l)
 
 d0=parts["drawer"]
-Y_CLOSED=4.0           # drawer sits this far back so the pinion has room
-y_closed=Y_CLOSED
+Y_CLOSED=0.0           # FLUSH. The drawer front now lands level with the case
+y_closed=Y_CLOSED      # face; the rack grew with the drawer to keep the mesh
 # assembly pose: drawer floor on the deck, rack flipped blade-down through it
 # the case is three parts now; assemble them for the interference sweep
 _lo=parts["case_lower"].copy()
@@ -704,6 +762,20 @@ chk("the two servos do not clash",
     (DR_X[1]+FIN_X+PIN_DX-P["sg_l"]/2) > (DR_X[0]+FIN_X+PIN_DX+P["sg_l"]/2),
     f"gap {(DR_X[1]-DR_X[0])-P['sg_l']:.1f} mm")
 chk("drawer clears the case top",DR_TOP+P["gap"]<=CH-WL-2,f"{DR_TOP:.1f} of {CH-WL-2:.1f}")
+# ── how far can an extended drawer droop? ──
+_ceil   = CH - WL                      # bay ceiling, assembly Z
+_ribtop = DECK + 0.2 + P["dr_h"] + ANTITIP
+_rise   = _ceil - _ribtop              # how far the rear corner can lift
+_ondeck = DR_D - TRAVEL                # still supported at full travel
+_droop  = TRAVEL * _rise/_ondeck
+chk("anti-tip rib steps around the OLED posts",
+    all(not (a0 < b1 and b0 < a1) for a0,a1 in rib_segments() for b0,b1 in post_bands()),
+    f"{len(rib_segments())} segments: " +
+    ", ".join(f"{a:.1f}-{b:.1f}" for a,b in rib_segments()))
+chk("anti-tip rib clears the bay ceiling", _rise >= 0.4,
+    f"{_rise:.2f} mm (rib top {_ribtop:.1f}, ceiling {_ceil:.1f})")
+chk("extended drawer cannot droop out of mesh", _droop <= 2.0,
+    f"{_droop:.2f} mm nose drop at full travel, was 5.14 without the rib")
 chk("all watertight",all(m.is_watertight for m in parts.values()),"")
 for n,m in parts.items():
     nb=len(m.split(only_watertight=False))
