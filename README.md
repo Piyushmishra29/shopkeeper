@@ -303,6 +303,42 @@ fix at about ₹30.
 
 ---
 
+## Geometry for a client or a machine shop
+
+Every part, in three formats. **The mesh is the same object in all of them** — one generator,
+one export.
+
+| where | format | for |
+|---|---|---|
+| `nano/*.stl` | STL | printing, and 3D CAM |
+| `cad/export/obj/*.obj` | OBJ | import into almost anything |
+| `nano/plates/*.3mf` | 3MF | slicer-ready plates, orientation baked in |
+| `cad/export/*.dxf` | DXF, mm | flat profiles for laser, waterjet or 2D cut |
+
+<p align="center">
+  <img src="docs/img/exploded_labelled.gif" width="60%" alt="exploded, each part named">
+</p>
+
+**There is no STEP file, and it is worth saying why.** STEP is a boundary representation —
+exact surfaces, true arcs, named faces. This geometry is a triangle mesh, authored for a
+printer. Converting mesh to STEP does not recover what was never in it: you get a solid built
+from thousands of facets, which imports and looks correct and is unpleasant to machine, because
+every cylinder is really a polygon and the toolpath chatters around it.
+
+If the shop wants proper B-rep, the honest route is to rebuild from `cad/nano.py` — every
+dimension is a named entry in the `P` dict at the top of that file, and each part function
+reads as a recipe. It is half a day for a CAD operator and the result is genuinely machinable.
+Importing the STL into Fusion or FreeCAD and converting to solid is the fast, faceted
+alternative and is fine for a one-off.
+
+Regenerate the exports at any time:
+
+```sh
+.venv/bin/python cad/export_cam.py     # DXF profiles + OBJ
+```
+
+---
+
 ## Print it
 
 The meshes in `nano/` are the build. You do not have to run any Python to print.

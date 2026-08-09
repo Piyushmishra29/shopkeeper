@@ -116,6 +116,34 @@ def exploded_still():
     save(img, "exploded.png")
 
 
+def exploded_labelled(n=40):
+    """Exploded, with each part named as it separates. The unlabelled version
+    shows that it comes apart; this one says what the pieces are, which is what
+    somebody being handed the repo actually needs."""
+    from PIL import ImageDraw
+    ROWS = (("CASE UPPER", 0.86), ("DRAWER x2", 0.62),
+            ("DECK", 0.44), ("PINION x2", 0.30),
+            ("SG90 x2", 0.18), ("CASE LOWER", 0.05))
+    fr = []
+    for i in range(n):
+        t = ease(min(i / (n * 0.55), 1.0))          # out, then hold
+        img = render(cabinet(pull=(0, 0), sep=32.0*t),
+                     eye=(200, -240, 175 + 40*t), target=(46, 34, 40 + 44*t),
+                     W=620, H=560, fov=28, ss=2)
+        im = Image.fromarray(img)
+        dr = ImageDraw.Draw(im)
+        for k, (label, y) in enumerate(ROWS):
+            a = max(0.0, min(1.0, (t - 0.25 - k*0.06) / 0.35))
+            if a <= 0.02:
+                continue
+            yy = int(560 * (1.0 - y))
+            g = int(150 + 105*a)
+            dr.line((16, yy, 40, yy), fill=(g, g, g), width=1)
+            dr.text((46, yy - 5), label, fill=(g, g, g))
+        fr.append(np.array(im))
+    gif(fr, "exploded_labelled.gif", ms=90)
+
+
 def exploded_gif(n=28):
     fr = []
     for i in range(n):
