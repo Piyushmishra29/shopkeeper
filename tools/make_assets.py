@@ -94,12 +94,17 @@ def ease(t):
 
 # ── 1. hero ───────────────────────────────────────────────────────────────
 def hero():
-    o = cabinet(pull=(NA.TRAVEL*153/180, 0.0))
-    img = render(o, eye=(150, -196, 92), target=(46, 26, 40),
-                 W=1400, H=800, fov=30, ss=3,
-                 lights=((0.50, -0.80, 0.75, 1.15),
-                         (-0.90, -0.30, 0.30, 0.42),
-                         (0.05, 0.85, 0.45, 0.26)))
+    """Banner. Shot from high three-quarter, which is the angle that reads
+    best here: from lower down you see straight through the gap between the
+    two drawer mouths into the bay, because case_lower's front wall stops at
+    the deck line and the mullion above it is thin."""
+    cmd = NA.TRAVEL*153/180
+    o = cabinet(pull=(cmd, cmd*0.30))
+    img = render(o, eye=(120, -152, 178), target=(46, 28, 26),
+                 W=1600, H=620, fov=26, ss=3,
+                 lights=((0.50, -0.80, 0.80, 1.20),
+                         (-0.90, -0.30, 0.30, 0.44),
+                         (0.05, 0.85, 0.45, 0.28)))
     save(img, "hero.png")
 
 
