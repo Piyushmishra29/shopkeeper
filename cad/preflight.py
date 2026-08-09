@@ -84,16 +84,16 @@ def drawer_at(slot, pull):
 # pedestal at SG_BASE - not on the floor. The servo's height is what sets the
 # pinion's height, so getting it wrong here hides the whole stack-up.
 def servo_at(slot):
-    # LYING on its side: shaft along X, pinion a disc on its end. Body is sg_h
-    # long along X from the spline face; cross-section sg_l x sg_w with the
-    # shaft 5.9 in from one end of sg_l (Y here) and sg_w across Z.
-    px  = DR_X[slot] + FIN_X + FIN_T/2 + 1.0
-    sgn = NA.SG_DIR[slot]
-    x0  = px + sgn*(NA.P["gear_t"]/2 + 1.6)
-    body = box(extents=[SG_H, SG_L, SG_W])
-    body.apply_translation([x0 + sgn*SG_H/2,
-                            WL + PIN_Y + SG_L/2 - 5.9, NA.AXIS_Z])
-    return body
+    # UPRIGHT again: shaft vertical, the gear lies flat like a turntable and
+    # meshes with the blade's vertical flank. Centred on the BODY, not the
+    # shaft - they are 5.5 mm apart once the shaft offset is modelled.
+    px  = DR_X[slot] + FIN_X + PIN_DX
+    bcx = NA.sg_body_cx(slot, px)
+    body = box(extents=[SG_L, SG_W, SG_H])
+    body.apply_translation([bcx, WL + PIN_Y, SG_BASE + SG_H/2])
+    tabs = box(extents=[SG_TAB, SG_W, 2.5])
+    tabs.apply_translation([bcx, WL + PIN_Y, SG_BASE + SG_EAR + 1.25])
+    return trimesh.util.concatenate([body, tabs])
 
 STATIC = {"case_lower": case_lo, "deck": deck, "case_upper": case_up,
           "servo_A": servo_at(0), "servo_B": servo_at(1)}
@@ -124,19 +124,30 @@ pin = L("pinion")
 pin_r_tip = max(np.linalg.norm(pin.vertices[:, :2] - [0, 0], axis=1))
 chk("pinion tip radius", abs(pin_r_tip - (R_P + ADD)) < 0.25,
     f"{pin_r_tip:.2f} mm, expected {R_P+ADD:.2f}")
-# count the tooth loops in a horizontal section through the tooth band -
-# counting raw vertices at z=0 was a bad proxy, because the boolean welds the
-# underside into a handful of big triangles and the count says nothing
-_sec = drawer0.section(plane_origin=[0, 0, TOOTH_H*0.5], plane_normal=[0, 0, 1])
-_nl = len(_sec.entities) if _sec is not None else 0
-chk("drawer carries teeth on its underside", _nl >= 12,
-    f"{_nl} loops in the section at z={TOOTH_H*0.5:.2f}")
-pitch_z = DECK + 0.2 + ADD
-chk("lying pinion axis position", abs((pitch_z - NA.AXIS_Z) - R_P) < 0.05,
-    f"axis {NA.AXIS_Z:.2f}, pitch {pitch_z:.2f} -> {pitch_z-NA.AXIS_Z:.2f} vs R_P {R_P:.2f}")
-chk("pinion tip reaches into the teeth",
-    NA.AXIS_Z + pin_r_tip > DECK + 0.2 + 0.5,
-    f"tip {NA.AXIS_Z+pin_r_tip:.2f}, tooth tips start {DECK+0.2:.2f}")
+
+# The blade is part of the drawer, so measure it off the drawer: everything
+# hanging below the floor IS the blade.
+dv = drawer0.vertices
+blade = dv[dv[:, 2] < -0.5]
+chk("drawer carries its own blade", len(blade) > 50,
+    f"{len(blade)} vertices below the floor line")
+tip_x = blade[:, 0].max()
+pitch_x = tip_x - ADD
+pin_axis_x = FIN_X + PIN_DX
+centre = pin_axis_x - pitch_x
+chk("blade/pinion centre distance", abs(centre - NA.CDIST) < 0.05,
+    f"{centre:.3f} mm, needs {NA.CDIST:.3f}")
+
+gear_t = NA.P["gear_t"]
+pin_z0, pin_z1 = SG_HORN, SG_HORN + gear_t
+blade_z0 = DECK + 0.2 + float(drawer0.bounds[0][2])
+blade_z1 = DECK + 0.2 + DR_FLOOR
+ov = min(blade_z1, pin_z1) - max(blade_z0, pin_z0)
+chk("pinion/blade vertical overlap", ov >= gear_t - 0.01,
+    f"{ov:.2f} of {gear_t:.2f} mm face  (blade {blade_z0:.1f}-{blade_z1:.1f}, "
+    f"pinion {pin_z0:.1f}-{pin_z1:.1f})")
+chk("blade clears the electronics", blade_z0 >= FLOOR_T + NA.P["esp_h"] + 1.5,
+    f"blade bottom {blade_z0:.1f}, stack top {FLOOR_T+NA.P['esp_h']:.1f}")
 
 print("\nPART INTEGRITY")
 for n in ("case_lower", "case_upper", "deck", "drawer", "pinion"):

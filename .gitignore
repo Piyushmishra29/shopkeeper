@@ -5,3 +5,7 @@ __pycache__/
 
 # real network credentials, never committed
 firmware/secrets.py
+
+# stray slicer output and Finder duplicates
+result.json
+*copy.stl
