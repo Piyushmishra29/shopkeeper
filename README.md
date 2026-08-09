@@ -1,5 +1,19 @@
 # shopkeeper
 
+<p align="center">
+  <img src="https://img.shields.io/badge/status-working%20demonstrator-FF8A1E?style=flat-square&labelColor=1F2124" alt="status">
+  <img src="https://img.shields.io/badge/bench-260%20cycles%20%C2%B7%200%20failures-2EA043?style=flat-square&labelColor=1F2124" alt="bench">
+  <img src="https://img.shields.io/badge/print-140%20g%20%C2%B7%202%20plates-FF8A1E?style=flat-square&labelColor=1F2124" alt="print">
+  <img src="https://img.shields.io/badge/built%20in-36%20hours-FF8A1E?style=flat-square&labelColor=1F2124" alt="built in">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/firmware-MicroPython%201.28-3776AB?logo=python&logoColor=white&style=flat-square&labelColor=1F2124" alt="micropython">
+  <img src="https://img.shields.io/badge/MCU-ESP32--S3-E7352C?logo=espressif&logoColor=white&style=flat-square&labelColor=1F2124" alt="esp32">
+  <img src="https://img.shields.io/badge/CAD-parametric%20Python-4B8BBE?logo=python&logoColor=white&style=flat-square&labelColor=1F2124" alt="cad">
+  <img src="https://img.shields.io/badge/licence-MIT-59636B?style=flat-square&labelColor=1F2124" alt="licence">
+</p>
+
 **A tool crib that knows who took what.**
 
 Type a PIN on your phone and the one drawer you are cleared for slides itself open. Take what you
