@@ -54,7 +54,10 @@ class Drawer:
                 "cycles": self.cycles, "pos": round(self.pos, 3),
                 "us": int(self.closed_us + self.pos *
                           (self.open_us - self.closed_us)),
-                "deg": round(abs(self.open_us - self.closed_us) / 2000.0 * 180, 1)}
+                "deg": round(abs(self.open_us - self.closed_us) / 2000.0 * 180, 1),
+                # servo.py reports this and the limit finder reads it; without
+                # it the mock's drawer dict was one key short of the hardware's
+                "walking": False}
 
     def move(self, opened, log):
         """Same shape as the firmware: returns immediately, finishes later."""
@@ -108,12 +111,23 @@ class Cabinet:
 
     @property
     def locked(self):
+        # Same rule as server.py, including REQUIRE_PIN. Without this the mock
+        # could never reproduce bench mode, so the loud BYPASSED chip - the one
+        # piece of UI that exists to stop this cabinet being demonstrated with
+        # its lock off - was untestable anywhere except on the hardware.
+        if not getattr(config, "REQUIRE_PIN", True):
+            return False
         if not self.unlocked_at:
             return True
         return time.time() - self.unlocked_at > config.PIN_TIMEOUT_S
 
     def state(self):
+        # Key set must match server.py's state() exactly. It did not: "bypass"
+        # and "limits" were missing here, so the UI's bench-mode chip and the
+        # limit finder both read undefined against the mock and only came right
+        # on the board - which is precisely backwards for a development target.
         return {"unit": config.UNIT, "fw": config.FW, "site": config.SITE,
+                "bypass": not getattr(config, "REQUIRE_PIN", True),
                 "net": "AP:" + config.AP_SSID,
                 "locked": self.locked, "timeout": config.PIN_TIMEOUT_S,
                 "left": 0 if self.locked else max(0, config.PIN_TIMEOUT_S -
@@ -121,7 +135,8 @@ class Cabinet:
                 "uptime": int(time.time() - BOOT), "mem": 2029856,
                 "drawers": [dict(d.state(), tools=config.TOOLS.get(d.id, []))
                             for d in self.drawers],
-                "log": self.log.entries[:24]}
+                "log": self.log.entries[:24],
+                "limits": {}}
 
 
 CAB = Cabinet()

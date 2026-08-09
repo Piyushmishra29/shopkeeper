@@ -4,6 +4,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0B0D0F">
 <title>shopkeeper NANO — tool access control</title>
+<!-- The mark, inline. Without a declared icon every browser asks the ESP32 for
+     /favicon.ico on every load, takes a 404 and logs a console error on a
+     screen that is supposed to have none. A data URI costs no request and no
+     second file on flash. -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><path d='M6 31 L20 6 L34 31 Z' fill='none' stroke='%23FF9933' stroke-width='2.6' stroke-linejoin='round'/><path d='M13.5 31 L20 19 L26.5 31 Z' fill='%23FF5533'/></svg>">
 <style>
 /* ═══════════════════════════════════════════════════════════════════════
    shopkeeper NANO — operator terminal
@@ -120,11 +125,19 @@ body{
 .st::before{content:"";width:5px;height:5px;background:currentColor;flex:none}
 .st.in{color:var(--t3)} .st.out{color:var(--acc)}
 .scroll{max-height:246px;overflow:auto;overscroll-behavior:contain}
+/* The register is a fixed list out of config.TOOLS, and its own header counts
+   the rows. At 246px the eighth tool sat below the fold of a panel captioned
+   "8 items", so the cap is raised to clear the register the machine ships with
+   and the scroll is left as the overflow path, not the normal case. */
+.scroll.reg{max-height:420px}
 .scroll::-webkit-scrollbar{width:9px}
 .scroll::-webkit-scrollbar-thumb{background:var(--rule2)}
 
 /* ── ledger ──────────────────────────────────────────────────────────── */
-.led-row{display:grid;grid-template-columns:8px 62px 104px 1fr;gap:0;
+/* 74px, not 62: "15m 25s" measures 64px in this face and every single row in
+   the ledger was being ellipsised to "15m 2...". An audit log whose timestamps
+   are truncated is not an audit log. */
+.led-row{display:grid;grid-template-columns:8px 74px 104px 1fr;gap:0;
   border-bottom:1px solid var(--rule);align-items:stretch}
 .led-row:last-child{border-bottom:0}
 .led-row i{background:var(--t4)}
@@ -135,6 +148,10 @@ body{
 .led-row .w{color:var(--t1);letter-spacing:.09em}
 .led-row.e-rej .w{color:var(--bad)}
 .led-row.e-open .w{color:var(--acc)}
+/* Entries carried over from an earlier power-on. Their age cannot be stated
+   against this boot's clock, so the row says so instead of guessing. */
+.led-row.pre span{color:var(--t4)}
+.led-row.pre .w{color:var(--t3)}
 .empty{padding:20px;text-align:center;color:var(--t4);font:400 10.5px/1 var(--mono);
   letter-spacing:.14em;text-transform:uppercase}
 
@@ -208,7 +225,13 @@ body{
   color:var(--t3);padding-right:16px;margin-right:16px;
   border-right:1px solid var(--rule);white-space:nowrap}
 .foot span:last-child{border-right:0}
-.foot b{color:var(--t2);font-weight:500}
+/* The LABEL is uppercased, never the VALUE. CSS text-transform:uppercase maps
+   U+00B5 MICRO SIGN onto U+039C GREEK CAPITAL MU, which paints as a Latin M -
+   so "650-2350 us" was being displayed as "650-2350 MS". A servo pulse band
+   reported in milliseconds instead of microseconds is wrong by a factor of a
+   thousand, and it is the kind of wrong an engineer reads straight past. Units
+   are case-sensitive; the footer is not allowed to recase them. */
+.foot b{color:var(--t2);font-weight:500;text-transform:none}
 .hide{display:none!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media(max-width:520px){
@@ -275,7 +298,7 @@ body{
       <div class="panel">
         <div class="phead"><h2>Tool register</h2><div class="grow"></div>
           <span class="tag" id="reg-n">&mdash;</span></div>
-        <div class="scroll"><table class="tbl" id="reg"></table></div>
+        <div class="scroll reg"><table class="tbl" id="reg"></table></div>
       </div>
 
       <div class="panel">
@@ -301,7 +324,8 @@ body{
 <footer class="foot">
   <span>FW <b id="f-fw">&mdash;</b></span>
   <span>Drive <b>SG90 &times;2</b></span>
-  <span>Gear <b>m1.25 &times; 16T</b></span>
+  <span>Gear <b id="f-gear">&mdash;</b></span>
+  <span>Case <b id="f-case">&mdash;</b></span>
   <span>Stroke <b id="f-stroke">&mdash;</b></span>
   <span>Pulse <b id="f-pulse">&mdash;</b></span>
   <span>Heap <b id="f-mem">&mdash;</b></span>
@@ -367,49 +391,145 @@ document.addEventListener("keydown", function(e){
   else if (e.key === "Backspace"){ e.preventDefault(); key("CLR"); }
 });
 
+/* ── cabinet geometry ────────────────────────────────────────────────────
+   The section below is a SECTION, not an illustration, so every figure in it
+   has to be the CAD's. This block is the only place a millimetre is written
+   down; each line names the symbol it was taken from in cad/nano.py, and
+   everything else on the screen is derived from here. If nano.py's P dict
+   moves, this block is the one thing to re-sync.
+
+   Verified against cad/nano.py P dict, 2026-08-09.                        */
+var GEO = {
+  cd:       74.0,   /* P["cd"]       case depth - the axis the drawer runs on */
+  ch:       58.0,   /* P["ch"]       case height (was 66 before the one-piece
+                                     drawer put the teeth in its own floor)   */
+  deck_z:   29.5,   /* P["deck_z"]   deck underside                           */
+  deck_t:    2.5,   /* P["deck_t"]                                            */
+  dr_d:     59.0,   /* P["dr_d"]     drawer depth                             */
+  dr_h:     20.0,   /* P["dr_h"]                                              */
+  dr_floor:  4.0,   /* P["dr_floor"] the rack teeth are cut UP into this      */
+  module:   1.25,   /* P["module"]                                            */
+  teeth:      16,   /* P["teeth"]                                             */
+  add_f:     0.8,   /* P["add_f"]    stub addendum, 0.8m not 1.0m             */
+  pin_y:    12.3    /* PIN_Y         pinion axis, measured back from the mouth */
+};
+/* the same derivations nano.py does, in the same order */
+GEO.deck    = GEO.deck_z + GEO.deck_t;              /* 32.0  deck top face    */
+GEO.dr_und  = GEO.deck + 0.2;                       /* 32.2  DR_UND           */
+GEO.r_p     = GEO.module * GEO.teeth / 2;           /* 10.0  R_P              */
+GEO.add     = GEO.add_f * GEO.module;               /*  1.0  ADD              */
+GEO.r_tip   = GEO.r_p + GEO.add;                    /* 11.0  R_TIP            */
+GEO.pitch_z = GEO.dr_und + GEO.add;                 /* 33.2  PITCH_Z          */
+GEO.axis_z  = GEO.pitch_z - GEO.r_p;                /* 23.2  AXIS_Z           */
+GEO.travel  = Math.PI * GEO.r_p;                    /* 31.42 TRAVEL, full     */
+/* The drawer's front face is FLUSH with the case mouth at rest - nano.py's
+   drawer() sets y0=0.0, "front face flush with the case". The 15 mm the case
+   has over the drawer is the electronics bay BEHIND it, not a gap in front. */
+GEO.bay     = GEO.cd - GEO.dr_d;                    /* 15.0  electronics bay  */
+
+/* servo.py keeps its OWN copy of pi * R_P to turn a pulse span into millimetres.
+   That means the pinion is written down in three places - nano.py, servo.py and
+   here - and a tooth count that changes in one of them is exactly how this page
+   came to be drawing a cabinet that no longer existed. The firmware reports
+   both travel_mm and the degrees it represents, so the full 180 deg travel it
+   believes in can be recovered and compared with this block. Console only: it
+   is a note for whoever next changes the gear, not an operator-facing alarm. */
+var geoChecked = false;
+function checkGeo(d){
+  if (geoChecked || !d || !d.deg) return;
+  geoChecked = true;
+  var fwFull = d.travel_mm / (d.deg / 180);
+  if (Math.abs(fwFull - GEO.travel) > 0.1)
+    console.warn("shopkeeper: geometry drift. Firmware implies " +
+      fwFull.toFixed(2) + " mm of travel at 180°; this page's GEO says " +
+      GEO.travel.toFixed(2) + " mm. Re-sync GEO/servo.py with cad/nano.py.");
+}
+
 /* ── bay elevation ───────────────────────────────────────────────────────
    A section through the cabinet with the drawer where it actually is, and a
    dimension line under it carrying the live figure. This is the difference
    between a status word and a machine: an engineer reads the drawing, checks
-   the number against it, and believes both.                              */
+   the number against it, and believes both - which only holds if the drawing
+   is true. ONE scale, used on both axes; the case at its real 74 x 58; the
+   drawer at the mouth where it actually sits; the deck it rides on and the
+   pinion lying under it with its axis horizontal, which is the whole of the
+   current drive.                                                          */
 function elevation(d){
-  var PPM = 2.15, CASE = 74, DRW = 59, tr = d.travel_mm;
-  var x0 = 26, y0 = 22, cw = CASE*PPM, ch = 54;
-  var dx = x0 + 5, dw = DRW*PPM, dh = ch - 14;
-  var off = (d.pos || 0) * tr * PPM;
-  var W = 360, H = 108;
-  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="drawer position">'+
+  var K = 2.15;                       /* px per mm - THE SAME IN BOTH AXES */
+  var x0 = 26, y0 = 20;               /* case rear-top corner, in SVG units */
+  var tr = d.travel_mm;               /* commanded stroke, live from the servo */
+  var cw = GEO.cd * K, chh = GEO.ch * K;
+  var floorY = y0 + chh;
+  /* height above the case floor -> SVG y */
+  function Z(h){ return floorY - h * K; }
+  /* depth back from the mouth -> SVG x. The mouth is on the RIGHT. */
+  function X(y){ return x0 + (GEO.cd - y) * K; }
+
+  var off  = (d.pos || 0) * tr * K;
+  var drX  = X(GEO.dr_d), drW = GEO.dr_d * K;
+  var drY  = Z(GEO.dr_und + GEO.dr_h), drH = GEO.dr_h * K;
+  var deckY = Z(GEO.deck), deckH = GEO.deck_t * K;
+  var pinX = X(GEO.pin_y), pinY = Z(GEO.axis_z);
+  var dimY = floorY + 9, W = 360, H = 172;
+
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Section through '+
+      esc(d.name)+': '+GEO.cd+' by '+GEO.ch+' mm case, drawer '+
+      ((d.pos||0)*tr).toFixed(1)+' mm out of '+tr.toFixed(1)+' mm">'+
     '<defs><linearGradient id="g'+d.id+'" x1="0" y1="0" x2="0" y2="1">'+
       '<stop offset="0" stop-color="#FFB259"/><stop offset="1" stop-color="#D97F14"/>'+
     '</linearGradient></defs>'+
-    /* deck line */
-    '<line x1="'+(x0-8)+'" y1="'+(y0+ch)+'" x2="'+(x0+cw+96)+'" y2="'+(y0+ch)+'" '+
+    /* mech bay floor datum, run out past the case so it reads as a datum */
+    '<line x1="'+(x0-8)+'" y1="'+floorY+'" x2="'+(x0+cw+66)+'" y2="'+floorY+'" '+
       'stroke="#2E353B" stroke-width="1"/>'+
-    /* case */
-    '<rect x="'+x0+'" y="'+y0+'" width="'+cw+'" height="'+ch+'" fill="none" '+
-      'stroke="#59636B" stroke-width="1.6"/>'+
-    /* mouth: the case is open at the front, so break the line there */
-    '<rect x="'+(x0+cw-2)+'" y="'+(y0+4)+'" width="4" height="'+(dh+2)+'" fill="#0E1113"/>'+
-    /* drawer */
+    /* deck: the drawer rides on this, and it is slotted for the pinion */
+    '<rect x="'+x0+'" y="'+deckY.toFixed(2)+'" width="'+cw.toFixed(2)+
+      '" height="'+deckH.toFixed(2)+'" fill="#1B2024" stroke="#2E353B" '+
+      'stroke-width="0.8"/>'+
+    /* the lying pinion. Axis HORIZONTAL, under the drawer, rolling on teeth
+       cut into the drawer's own floor - so it is drawn where it meshes, and
+       it does not travel with the drawer. */
+    '<g transform="translate('+pinX.toFixed(2)+','+pinY.toFixed(2)+')">'+
+      '<circle r="'+(GEO.r_tip*K).toFixed(2)+'" fill="#14181B" stroke="#59636B" '+
+        'stroke-width="1"/>'+
+      '<circle r="'+(GEO.r_p*K).toFixed(2)+'" fill="none" stroke="#3E464C" '+
+        'stroke-width="0.8" stroke-dasharray="3 3"/>'+
+      '<line x1="-5" y1="0" x2="5" y2="0" stroke="#5F686F" stroke-width="0.8"/>'+
+      '<line x1="0" y1="-5" x2="0" y2="5" stroke="#5F686F" stroke-width="0.8"/>'+
+    '</g>'+
+    /* drawer, flush with the mouth at rest and sliding out toward it */
     '<g transform="translate('+off.toFixed(2)+',0)">'+
-      '<rect x="'+dx+'" y="'+(y0+7)+'" width="'+dw+'" height="'+dh+'" rx="1" '+
-        'fill="url(#g'+d.id+')"/>'+
-      '<rect x="'+(dx+dw-9)+'" y="'+(y0+7+dh/2-2)+'" width="6" height="4" '+
-        'fill="rgba(20,18,10,.45)"/>'+
+      '<rect x="'+drX.toFixed(2)+'" y="'+drY.toFixed(2)+'" width="'+drW.toFixed(2)+
+        '" height="'+drH.toFixed(2)+'" rx="1" fill="url(#g'+d.id+')"/>'+
+      /* the floor that carries the teeth - the part that replaced the rack */
+      '<rect x="'+drX.toFixed(2)+'" y="'+(drY+drH-GEO.dr_floor*K).toFixed(2)+
+        '" width="'+drW.toFixed(2)+'" height="'+(GEO.dr_floor*K).toFixed(2)+
+        '" fill="rgba(20,18,10,.30)"/>'+
+      /* moulded finger pull, on the front face */
+      '<rect x="'+(drX+drW-11).toFixed(2)+'" y="'+(drY+drH/2-2.5).toFixed(2)+
+        '" width="7" height="5" fill="rgba(20,18,10,.45)"/>'+
     '</g>'+
-    /* dimension line for the stroke */
+    /* Case outline last, so it rules over everything inside it. Drawn as an
+       open path rather than a rect with a patch over the mouth: the mouth is a
+       real gap in the front wall, and masking it meant the patch also painted
+       over the drawer's front face, which is flush with that wall at rest. */
+    '<path d="M'+x0+' '+y0+'H'+(x0+cw).toFixed(2)+
+      'M'+x0+' '+y0+'V'+floorY.toFixed(2)+
+      'M'+x0+' '+floorY.toFixed(2)+'H'+(x0+cw).toFixed(2)+
+      'M'+(x0+cw).toFixed(2)+' '+y0+'V'+(drY-1).toFixed(2)+
+      'M'+(x0+cw).toFixed(2)+' '+(drY+drH+1).toFixed(2)+'V'+floorY.toFixed(2)+
+      '" fill="none" stroke="#59636B" stroke-width="1.6"/>'+
+    /* dimension line: the stroke the firmware actually commands */
     '<g stroke="#5F686F" stroke-width="1" fill="none">'+
-      '<line x1="'+(x0+cw)+'" y1="'+(y0+ch+9)+'" x2="'+(x0+cw)+'" y2="'+(y0+ch+21)+'"/>'+
-      '<line x1="'+(x0+cw+tr*PPM)+'" y1="'+(y0+ch+9)+'" x2="'+(x0+cw+tr*PPM)+'" y2="'+(y0+ch+21)+'"/>'+
-      '<line x1="'+(x0+cw)+'" y1="'+(y0+ch+15)+'" x2="'+(x0+cw+tr*PPM)+'" y2="'+(y0+ch+15)+'"/>'+
+      '<line x1="'+(x0+cw).toFixed(2)+'" y1="'+dimY+'" x2="'+(x0+cw).toFixed(2)+'" y2="'+(dimY+12)+'"/>'+
+      '<line x1="'+(x0+cw+tr*K).toFixed(2)+'" y1="'+dimY+'" x2="'+(x0+cw+tr*K).toFixed(2)+'" y2="'+(dimY+12)+'"/>'+
+      '<line x1="'+(x0+cw).toFixed(2)+'" y1="'+(dimY+6)+'" x2="'+(x0+cw+tr*K).toFixed(2)+'" y2="'+(dimY+6)+'"/>'+
     '</g>'+
-    '<text x="'+(x0+cw+tr*PPM+7)+'" y="'+(y0+ch+18.5)+'" fill="#97A0A8" '+
+    '<text x="'+(x0+cw+tr*K+7).toFixed(2)+'" y="'+(dimY+9.5)+'" fill="#97A0A8" '+
       'font-family="ui-monospace,Menlo,monospace" font-size="9.5">'+
       tr.toFixed(1)+' mm</text>'+
-    /* live position marker */
     '<text x="'+x0+'" y="'+(y0-7)+'" fill="#5F686F" '+
       'font-family="ui-monospace,Menlo,monospace" font-size="9" '+
-      'letter-spacing="1.6">SECTION A-A</text>'+
+      'letter-spacing="1.6">SECTION A-A &#183; '+GEO.cd+' &#215; '+GEO.ch+' mm</text>'+
     '</svg>';
 }
 
@@ -499,8 +619,16 @@ function render(){
   $("ledger").innerHTML = S.log.length ? S.log.map(function(e){
     var d = (e.drawer === null || e.drawer === undefined) ? ""
           : "BAY 0" + (e.drawer + 1);
-    return '<div class="led-row '+(cls[e.what]||"")+'"><i></i>'+
-      '<span>'+dur(S.uptime - e.up)+'</span>'+
+    /* store.py stamps every entry with ticks-since-boot and the log SURVIVES a
+       power cut, so entries carried over from an earlier power-on carry an
+       older boot's clock. Subtracting those from this boot's uptime goes
+       negative, and dur() used to clamp it to "0s" - which dated half the
+       ledger to "just now". The cabinet has no RTC, so the honest answer for
+       those rows is that their age is not knowable, not a fabricated zero. */
+    var pre = e.up > S.uptime + 2;
+    return '<div class="led-row '+(cls[e.what]||"")+(pre?" pre":"")+'"><i></i>'+
+      '<span'+(pre?' title="logged before this power-on"':'')+'>'+
+        (pre ? "pre-boot" : dur(S.uptime - e.up))+'</span>'+
       '<span class="w">'+esc(e.what)+'</span>'+
       '<span>'+esc(d + (e.detail ? (d ? " · " : "") + e.detail : "") || "—")+'</span>'+
       '</div>';
@@ -509,6 +637,11 @@ function render(){
 
   renderFinders();
   var d0 = S.drawers[0];
+  checkGeo(d0);
+  /* derived, never typed: if nano.py's pinion changes, GEO changes, and the
+     footer follows. It used to read "m1.25 x 16T" as literal text. */
+  $("f-gear").textContent = "m" + GEO.module + " × " + GEO.teeth + "T";
+  $("f-case").textContent = GEO.cd + " × " + GEO.ch + " mm";
   $("f-stroke").textContent = d0.travel_mm + " mm / " + d0.deg + "°";
   $("f-pulse").textContent = d0.closed_us + "–" + d0.open_us + " µs";
   $("f-mem").textContent = ((S.mem/1024)|0) + " KiB";
@@ -536,9 +669,10 @@ function buildCal(){
   }).join("") +
   '<div id="finders"></div>' +
   '<div class="warnbox">Dragging jogs the drive live. Endpoints commit to flash '+
-  'on release. <b>Stop before the drawer strains:</b> the mechanism has 31.4 mm '+
-  'of travel at a full 180&deg;, and most SG90 units stall against their own end '+
-  'stop before reaching it.</div>';
+  'on release. <b>Stop before the drawer strains:</b> the mechanism has '+
+  GEO.travel.toFixed(1)+' mm of travel at a full 180&deg; (&pi; &times; the '+
+  GEO.r_p.toFixed(1)+' mm pitch radius), and most SG90 units stall against '+
+  'their own end stop before reaching it.</div>';
   [].forEach.call($("cal").querySelectorAll("input"), function(r){
     var out = r.nextElementSibling;
     r.oninput = function(){
