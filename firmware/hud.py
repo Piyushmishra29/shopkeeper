@@ -23,6 +23,7 @@ long string can look clipped, but it can never silently vanish off the side.
 
 MicroPython: no f-strings with =, no dict unpacking, no str.ljust.
 """
+import framebuf
 import math
 import time
 
@@ -322,25 +323,20 @@ def s_web(d, ph, ctx):
         d.text(verb, (W - len(verb) * 8) // 2, 2, 0)
 
 
-def logo(d, x, y):
-    """The OMMI FORGE mark, 30 x 26, drawn rather than stored.
+# The OMMI FORGE mark, traced from the artwork itself rather than approximated.
+# The first attempt drew it from primitives - a circle, some diagonals, an F -
+# and it was recognisably not the logo. A mark is either exact or it is someone
+# else's mark. 42x32, 1 bit, MONO_HLSB, straight out of the source PNG by
+# tools/trace_logo (see the commit); blit rather than redrawn so it cannot
+# drift from the artwork.
+LOGO_W, LOGO_H = 42, 32
+LOGO = b'\x00\x00\x00\xff\xe0\x00\x00\x00\x01\xff\xf0\x00\x00\x00\x03\xff\xf8\x00\x00\x00\x03\xff\xfc\x00\x00\x00\x07\xf1\xfc\x00\x00\x00\x07\xf1\xfc\x00\x00\x00\x07\xf1\xfc\x00\x00\x00\x07\xf1\xfc\x00\x00\x00\x07\xf1\xfc\x00\x00\x00\x07\xf0\x00\x00\x00\xe0\x07\xf0\x00\x00\x07\xcf\x07\xf0\x00\x00\x0f\x9f\x07\xf0\xf8\x00\x1f>G\xf0\xf8\x00<\xfc\xe7\xf0\xf8\x009\xf9\xe7\xf8\xf8\x00s\xe7\xc7\xff\xfc\x00O\xcf\x97\xff\xfc\x00\x1f\x9f?\xff\xf8\x00>|\x7f\xf0\x00\x00|\xf9\xe7\xf0\x00\x00\xf9\xf3\xc7\xf0\x00\x00c\xe7\x97\xf8\x00\x00O\x9f7\xf8\x00\x00\x1f<\xf7\xf8\x00\x00>y\xef\xfc\x00\x00\x19\xf3\xcf\xfe\x00\x00\x03\xe7\x9f\xff\x00\x00\x07\x9f?\xff\x80\x00\x01<\xff\xff\xe0\x00~\xff\xff\xff\xff\xc0\xff\xff\xff\xff\xff\xc0'
 
-    A bitmap would be a byte array nobody can read or edit; this is primitives,
-    so the proportions can be nudged in the source. Three parts, same as the
-    artwork: a hatched disc for the o, an F with its bar, and the rule they
-    both stand on."""
-    # the disc, hatched with diagonals - the hatching is what makes it read as
-    # the mark rather than as a circle
-    d.fb.ellipse(x + 9, y + 12, 9, 9, 1)
-    for k in range(-8, 12, 4):
-        d.fb.line(x + 1 + k, y + 21, x + 10 + k, y + 3, 1)
-    d.fb.ellipse(x + 9, y + 12, 9, 9, 1)      # redraw so hatching cannot spill
-    # the F: stem, top arm, and the solid bar that is red in the artwork
-    d.fill_rect(x + 19, y + 1, 4, 21, 1)
-    d.fill_rect(x + 19, y + 1, 10, 4, 1)
-    d.fill_rect(x + 23, y + 10, 6, 4, 1)
-    # the rule both stand on
-    d.fill_rect(x, y + 23, 30, 3, 1)
+
+def logo(d, x, y):
+    fb = framebuf.FrameBuffer(bytearray(LOGO), LOGO_W, LOGO_H,
+                              framebuf.MONO_HLSB)
+    d.fb.blit(fb, x, y)
 
 
 def _ring(d, cx, cy, r, frac):
@@ -364,16 +360,9 @@ def s_demo(d, ph, ctx):
     d.fill(0)
     rail(d, "AUTO DEMO", dm.get("tag", ""))
     if stage == "HOLD":
-        left = int(dm.get("left", 0))
-        logo(d, 6, 18)                       # the mark, left
-        cx, cy = 92, 32                      # the countdown, right
-        frac = 1.0 - max(0.0, min(1.0, dm.get("frac", 0.0)))
-        _ring(d, cx, cy, 19, frac)
-        _ring(d, cx, cy, 16, frac)
-        n = str(left)
-        d.big(n, cx - len(n) * 8, cy - 8, 2)
-        txt(d, "OMMI FORGE", 2, 50)
-        txt(d, "s", cx + 14, cy + 2)
+        logo(d, (W - LOGO_W) // 2, 13)
+        txt_c(d, "OMMI FORGE", 47)
+        txt_c(d, "TOOL CABINET", 56)
     elif stage in ("OPEN", "CLOSE"):
         txt_c(d, dm.get("label", "BAY 1"), 15)
         pos = dm.get("pos", 0.0)
