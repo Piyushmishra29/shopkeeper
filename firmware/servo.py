@@ -204,12 +204,12 @@ class Servo:
     def travel_mm(self):
         """Millimetres the drawer actually moves for the commanded span.
 
-        180 deg of the m1.25 x 16T pinion is pi * 10.0 = 31.42 mm. The default
+        180 deg of the pinion is pi * config.PITCH_R. The default
         endpoints are 650..2350, a span of 1700 us out of the 2000 us that maps
         to 180 deg - so 153 deg, so 26.7 mm. The remaining 4.7 mm is why the
         drawer does not come all the way out, and that is deliberate."""
         span = abs(self.open_us - self.closed_us)
-        return 31.416 * (span / 2000.0)
+        return config.TRAVEL_MM * (span / 2000.0)
 
     def state(self):
         return {

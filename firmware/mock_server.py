@@ -44,7 +44,8 @@ class Drawer:
 
     @property
     def travel_mm(self):
-        return round(31.416 * abs(self.open_us - self.closed_us) / 2000.0, 1)
+        return round(config.TRAVEL_MM * abs(self.open_us - self.closed_us)
+                     / 2000.0, 1)
 
     def state(self):
         return {"id": self.id, "name": self.name, "pin": self.pin,

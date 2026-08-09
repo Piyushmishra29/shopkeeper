@@ -5,6 +5,8 @@ Everything a given unit needs to differ on lives here, so no other file has to
 be edited per build. Calibration written from the web UI is persisted to
 /data/cal.json and overrides the defaults below at boot.
 """
+import math
+
 
 # ── network ────────────────────────────────────────────────────────────────
 # AP is the default on purpose. A demonstrator has to work on a shop floor and
@@ -32,14 +34,25 @@ JOIN_TIMEOUT_S = 12
 # start cooking, so the defaults deliberately ask for less than the mechanism
 # can do.
 #
-#   span_us / 2000 * 180 = degrees,  degrees / 180 * 31.42 = mm of drawer
-#   650..2350  ->  1700 us  ->  153 deg  ->  26.7 mm of the 31.4 available
+#   span_us / 2000 * 180 = degrees,  degrees / 180 * TRAVEL_MM = mm of drawer
+#   650..2350  ->  1700 us  ->  153 deg  ->  16.69 mm of the 19.63 available
 #
 # (An earlier comment here claimed 700..2300 was 160 deg. It is 144. The
 # arithmetic is written out above so the next person can check it.)
 #
 # The web UI writes these live, so calibrate against the real drawer rather
 # than trusting the numbers here.
+# ── the gear, in ONE place ─────────────────────────────────────────────────
+# This number was written out by hand in servo.py, again in mock_server.py, and
+# a third time as a tooth count in www/index.html. When cad/nano.py went from
+# 16 teeth to 10 none of the three moved, so the firmware reported a 26.7 mm
+# stroke for a drawer that travels 16.69 and the terminal's footer advertised a
+# gear the machine does not have. Derived once here; everything else imports it.
+MODULE   = 1.25
+TEETH    = 10
+PITCH_R  = MODULE * TEETH / 2.0          # 6.25 mm
+TRAVEL_MM = math.pi * PITCH_R            # 19.63 mm for a full 180 deg
+
 SERVO_FREQ_HZ = 50
 DRAWERS = [
     {"id": 0, "name": "Drawer A", "pin": 5,  "closed_us": 650, "open_us": 2350},
@@ -57,12 +70,12 @@ TRAVEL_MS = 1100
 DETACH_AFTER_MS = 450
 
 # ── access ─────────────────────────────────────────────────────────────────
-# This is the whole product thesis in four lines. ZOLLER's toolOrganizer does
+# This is the whole product thesis in four lines. The ~20 lakh cabinets do
 # not weigh, photograph or RFID anything - inventory is trust-based, and what
 # is actually sold is controlled access plus a record of who opened what. So
 # that is what this implements.
 # Set False to bypass the lock entirely while working on the bench. The access
-# control IS the product - it is the whole argument against ZOLLER - so this is
+# control IS the product - it is the whole argument of the pitch - so this is
 # a development switch, not a feature. The terminal shows a loud BYPASSED chip
 # whenever it is off, because demonstrating this cabinet with its lock disabled
 # would undo the pitch in one sentence.
