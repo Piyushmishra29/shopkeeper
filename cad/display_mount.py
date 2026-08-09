@@ -2,7 +2,7 @@
 """
 shopkeeper NANO — DISPLAY MOUNT v0.3
 
-A 1.3" SH1106 and three status lamps, on a pod that sits on case_upper.
+A 1.3" SH1106 and two status lamps, on a pod that sits on case_upper.
 
     THE LID DOES NOT CHANGE. Not one cut.
     NO SUPPORTS. Both parts print flat on their own faces.
@@ -222,7 +222,10 @@ WIRE      = (34.0, 58.0, 41.9, 49.9)   # wire pass, inside the window all round
 # Three lamps in a column on the left, screen offset right to balance it. A
 # row of lamps under the screen would need another 12 mm of slope, which is
 # 7 mm of machine height, for no gain.
-SCREEN_CX = 53.0
+# Back on the case centreline. With three lamps the screen had to shift right
+# to make room for a column; with two it does not, and the layout goes
+# symmetric: a lamp each side, each one directly above its own spigot.
+SCREEN_CX = CASE_W / 2
 PEG_D     = 2.80                  # into a dia 3.00 hole: prints ~2.95
 PEG_PROUD = 1.6                   # stands this far past the PCB, so you can
                                   # see at a glance that it is seated
@@ -233,13 +236,11 @@ PEG_LEAD  = 0.4                   # stepped pilot on the tip
 # front edge there is 8.0. Mounted the other way round the connector does not
 # fit, and ACT_OFF would point the wrong way and clip the picture.
 HEADER_UPSLOPE = True
-# 20.0, not 14.0: at 14 the lamp bores overlapped the joint features in x, and
-# lamp 3's counterbore took a 9.2 mm3 bite out of the x=12 screw boss. 20 also
-# puts each lamp directly above a registration spigot, which is where they were
-# always meant to be.
-LAMP_CX   = 20.0
-LAMP_N    = 3                     # red / amber / green
-LAMP_PITCH = 12.0
+# TWO lamps, one each side, each sitting directly above a registration spigot
+# at x 20 and x 72 - the positions the lid's own holes already establish. This
+# replaces a left-hand column of three, which forced the screen off-centre and
+# put a bore where the joint boss lived.
+LAMP_POS  = ((HOLE_X[0], 0.0), (HOLE_X[1], 0.0))   # (u, v) on the face
 # A PLAIN THROUGH-BORE. The counterbore and its 45 deg lead-in are gone, and
 # both were wrong:
 #   - the bore was sized NOMINAL against this file's own shrink rule. A dia 6.0
@@ -270,7 +271,7 @@ CABLE_W, CABLE_H = 22.0, 12.0
 # hollow body left them floating - separate solids in one STL, which the
 # watertight check caught and a slicer would not have.
 JOINT_PINS   = ((12.0, BODY_Y[0] + 8.0), (80.0, BODY_Y[0] + 8.0))
-JOINT_SCREWS = ((30.0, BODY_Y[1] - 3.5), (76.0, BODY_Y[1] - 3.5))
+JOINT_SCREWS = ((12.0, BODY_Y[1] - 3.5), (80.0, BODY_Y[1] - 3.5))
 JOINT_D      = 3.0
 JOINT_HOLE   = slip(JOINT_D)      # was JOINT_D + 0.3, which printed as an
                                   # INTERFERENCE fit on two pins 68 mm apart
@@ -359,8 +360,7 @@ def peg_uv():
 
 def lamp_uv():
     """The lamp column, in face-local (u, v). Centred on the face."""
-    v0 = -(LAMP_N - 1) * LAMP_PITCH / 2
-    return [(LAMP_CX, v0 + i*LAMP_PITCH) for i in range(LAMP_N)]
+    return list(LAMP_POS)
 
 
 def base():
@@ -410,7 +410,7 @@ def body():
 
     # Hollow PARALLEL TO THE FACE, so the shell under it is a uniform WALL.
     # u IS PART X here - face_xf()'s origin is x 0 so that SCREEN_CX and
-    # LAMP_CX can be written as absolute case coordinates. Leaving this cut
+    # lamp positions can be written as absolute case coordinates. Leaving this cut
     # centred on u 0 hollowed x -41.5..41.5 instead of 4.5..87.5: half the body
     # stayed solid, which showed up as 686 mm2 of overhang rather than as
     # anything obviously wrong in the render.
@@ -713,7 +713,7 @@ if __name__ == "__main__":
           f"the one open number")
     print(f"  pod       {BASE_X[1]-BASE_X[0]:.0f} x {BASE_Y[1]-BASE_Y[0]:.1f}"
           f" x {BASE_T + BODY_H:.1f}   tilt {math.degrees(TILT):.0f} deg")
-    print(f"  lamps     {LAMP_N} x dia 5 mm at x {LAMP_CX:.0f}, {LAMP_PITCH:.0f} mm pitch")
+    print(f"  lamps     {len(LAMP_POS)} x dia 5 mm at x " + " and ".join(f"{u:.0f}" for (u, v) in LAMP_POS))
     print(f"  machine   66.0 -> {66.0 + BASE_T + BODY_H:.1f} mm tall\n")
 
     rep("mount_base", base())
@@ -863,14 +863,24 @@ if __name__ == "__main__":
         FPC_W/2 + 1.0 < MOD_PITCH_X/2 - PEG_D/2,
         f"FPC to u {FPC_W/2:.1f}, nearest peg edge at {MOD_PITCH_X/2 - PEG_D/2:.2f}")
     lampsu = [u for (u, v) in lamp_uv()]
-    chk("lamp column clears the screen",
-        LAMP_CX + LAMP_D/2 < SCREEN_CX - PCB_W/2 - 1.0,
-        f"lamp edge x {LAMP_CX + LAMP_D/2:.1f}, PCB starts x {SCREEN_CX-PCB_W/2:.1f}")
-    chk("lamp column clears the side wall", LAMP_CX - LAMP_D/2 > BODY_X[0] + WALL,
-        f"lamp edge x {LAMP_CX - LAMP_D/2:.1f}, inner wall x {BODY_X[0]+WALL:.1f}")
-    chk("lamp column fits the slope",
-        (LAMP_N-1)*LAMP_PITCH/2 + LAMP_D/2 < SLOPE_L/2 - WALL/math.cos(TILT),
-        f"column half-span {(LAMP_N-1)*LAMP_PITCH/2 + LAMP_D/2:.1f}, "
+    chk("lamps clear the screen",
+        all(abs(u - SCREEN_CX) - LAMP_D/2 > PCB_W/2 + 1.0 for (u, v) in lamp_uv()),
+        "gap "
+        + ", ".join(f"{abs(u-SCREEN_CX) - LAMP_D/2 - PCB_W/2:.2f}"
+                    for (u, v) in lamp_uv()) + " mm")
+    chk("lamps clear the side walls",
+        all(BODY_X[0] + WALL < u - LAMP_D/2 and u + LAMP_D/2 < BODY_X[1] - WALL
+            for (u, v) in lamp_uv()),
+        ", ".join(f"x {u-LAMP_D/2:.1f}..{u+LAMP_D/2:.1f}" for (u, v) in lamp_uv())
+        + f"  inner walls {BODY_X[0]+WALL:.1f}..{BODY_X[1]-WALL:.1f}")
+    chk("lamps sit above their own spigots",
+        all(abs(u - hx) < 0.01 for (u, v), hx in zip(lamp_uv(), sorted(HOLE_X))),
+        ", ".join(f"lamp x {u:.0f} over spigot x {hx:.0f}"
+                  for (u, v), hx in zip(lamp_uv(), sorted(HOLE_X))))
+    chk("lamps fit the slope",
+        max(abs(v) for (u, v) in lamp_uv()) + LAMP_D/2
+        < SLOPE_L/2 - WALL/math.cos(TILT),
+        f"reach {max(abs(v) for (u, v) in lamp_uv()) + LAMP_D/2:.1f}, "
         f"slope half {SLOPE_L/2 - WALL/math.cos(TILT):.1f}")
 
     print("\n  NOTHING BORES OUT OF THE PART")
