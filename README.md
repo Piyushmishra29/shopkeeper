@@ -1,11 +1,35 @@
-# shopkeeper — the display pod
+<h1 align="center">shopkeeper — the display pod</h1>
 
-A 1.3″ SH1106 and two status lamps, on a tilted pod that sits on the lid of the
-[shopkeeper](https://github.com/Piyushmishra29/shopkeeper/tree/main) tool crib.
+<p align="center">
+  A 1.3″ SH1106 and two status lamps, on a tilted pod that sits on the lid of the
+  <a href="https://github.com/Piyushmishra29/shopkeeper/tree/main">shopkeeper</a> tool crib.<br>
+  <b>The lid does not change. Not one cut.</b>
+</p>
 
-![The display pod, built and running](docs/display/pod.jpg)
+<p align="center">
+  <img src="https://img.shields.io/badge/status-printed%20%26%20running-2ea043?style=flat-square" alt="status">
+  <img src="https://img.shields.io/badge/checks-53%20pass%20%C2%B7%201%20fail-e3a008?style=flat-square" alt="checks">
+  <img src="https://img.shields.io/badge/supports-none-2ea043?style=flat-square" alt="supports">
+  <img src="https://img.shields.io/badge/pod-33.6%20g-4d4d4d?style=flat-square" alt="mass">
+  <img src="https://img.shields.io/badge/machine-66%20%E2%86%92%2094.8%20mm-4d4d4d?style=flat-square" alt="height">
+  <img src="https://img.shields.io/badge/lid-unmodified-1f6feb?style=flat-square" alt="lid">
+</p>
 
-**The lid does not change. Not one cut.**
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.14-3776ab?style=flat-square&logo=python&logoColor=white" alt="python">
+  <img src="https://img.shields.io/badge/trimesh%20%2B%20manifold3d-parametric-6e40c9?style=flat-square" alt="stack">
+  <img src="https://img.shields.io/badge/output-STL%20%2B%203MF-f0883e?style=flat-square" alt="output">
+  <img src="https://img.shields.io/badge/license-MIT-24292f?style=flat-square" alt="licence">
+</p>
+
+<p align="center">
+  <img src="docs/display/pod.jpg" width="620" alt="The display pod, built and running on the cabinet">
+  <br>
+  <sub><b>Built and running.</b> Screen on the case centreline, a lamp either side —
+  each one directly above the Ø5 hole that registers the pod.</sub>
+</p>
+
+---
 
 Everything registers on three features the top face already had. Two Ø5.00
 holes and a 26 × 10 window, drawn a generation ago as "provision" for an OLED
