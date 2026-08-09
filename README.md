@@ -234,6 +234,75 @@ ESP32 bay behind them.
 
 ---
 
+## How it works
+
+```mermaid
+flowchart LR
+  P["Phone or laptop<br/>any browser"] -->|"HTTP · PIN"| E
+  subgraph CAB["shopkeeper NANO"]
+    E["ESP32-S3<br/>MicroPython 1.28"]
+    E -->|"PWM 650–2350 µs"| S1["SG90 · GPIO 5"]
+    E -->|"PWM 650–2350 µs"| S2["SG90 · GPIO 6"]
+    E -->|"I²C · GPIO 1/2"| D["SH1106 OLED<br/>top face"]
+    E -->|"append-only"| L[("Log<br/>/data on flash")]
+    S1 --> R1["pinion m1.25 × 10T"] --> B1["Bay 1 drawer<br/>16.7 mm"]
+    S2 --> R2["pinion m1.25 × 10T"] --> B2["Bay 2 drawer<br/>16.7 mm"]
+  end
+```
+
+Everything is on the board. No cloud, no broker, no account — the cabinet raises its own
+access point, so it works in a meeting room with no wifi and keeps working when the internet
+does not.
+
+### An authorised pick
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Operator
+  participant T as Terminal (phone)
+  participant F as Firmware
+  participant M as Servo + rack
+  participant L as Log
+
+  O->>T: enter PIN
+  T->>F: POST /api/unlock
+  F-->>T: 200 · session opens, 2 min idle timer
+  O->>T: release Bay 1
+  T->>F: POST /api/drawer {id:0, open:true}
+  F-->>T: 202 accepted
+  F->>M: drive 650 → 2350 µs
+  F->>L: OPENED · bay 1 · operator
+  M-->>F: 16.7 mm out
+  Note over T,F: panel and page both switch to WEB CONTROL
+  O->>T: secure bay
+  T->>F: POST /api/drawer {id:0, open:false}
+  F->>L: CLOSED · bay 1
+  F-->>T: bay secured
+```
+
+The log is written **before** the confirmation goes back, so a move that happened is always
+recorded even if the network drops mid-reply. The record is the product; it does not get to
+be best-effort.
+
+### What a bay can be
+
+```mermaid
+stateDiagram-v2
+  [*] --> SECURED
+  SECURED --> MOVING: cleared + released
+  MOVING --> OPEN: stroke complete
+  OPEN --> MOVING: secure
+  MOVING --> SECURED: stroke complete
+  SECURED --> SECURED: not cleared · logged as REJECTED
+```
+
+Four states and no others. There is no drawer-position switch in v1 — the firmware assumes a
+commanded move completed, which is honest but not sensed, and a microswitch is the correct
+fix at about ₹30.
+
+---
+
 ## Print it
 
 The meshes in `nano/` are the build. You do not have to run any Python to print.
