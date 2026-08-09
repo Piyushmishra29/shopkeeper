@@ -1,0 +1,35 @@
+{
+ "part": "drawer_single",
+ "file": "nano/prev/drawer_single.stl",
+ "sha256": "de0d8cb8348da8bd74cdb302d5cf3b9220ef40cbbf941e6d52194c3581a342e1",
+ "locked": "2026-08-09",
+ "extents_mm": [
+  39.8,
+  59.0,
+  21.0
+ ],
+ "volume_mm3": 9641.78,
+ "watertight": true,
+ "bodies": 1,
+ "derived_from": "nano/drawer.stl @ 5d19926^ , internal divider removed",
+ "divider_removed": {
+  "y_mm": [
+   16.69,
+   18.49
+  ],
+  "thickness_mm": 1.8,
+  "z_mm": [
+   1.8,
+   21.0
+  ],
+  "mass_g": 1.25
+ },
+ "bin": {
+  "single_compartment_mm": [
+   3.0,
+   57.2
+  ],
+  "usable_depth_mm": 54.2
+ },
+ "note": "GEOMETRY FROZEN. Print savings are process-settings only; any change to this mesh breaks the lock."
+}
