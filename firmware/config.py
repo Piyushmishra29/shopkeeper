@@ -80,8 +80,11 @@ OLED_SDA      = 1
 OLED_ADDR     = 0x3C
 OLED_FREQ     = 400000
 OLED_CONTRAST = 0x95
-OLED_DWELL    = 2.5        # seconds per attract screen; a big numeral
-                           # needs longer to land than a line of text
+OLED_DWELL    = 3.5        # seconds per attract screen. The count-up screens
+                           # finish counting in roughly the first 1.4 s of the
+                           # dwell, so the rest is the numeral sitting still and
+                           # being read - which is the point of a big numeral.
+                           # Ten screens makes a ~35 s loop.
 
 # ── access ─────────────────────────────────────────────────────────────────
 # This is the whole product thesis in four lines. The ~20 lakh cabinets do
