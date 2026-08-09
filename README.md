@@ -7,17 +7,37 @@ need, push it shut, and the pick is logged against your name. Try the other draw
 moves.
 
 Built as a working demonstrator to pitch against ZOLLER's »toolOrganizer« — a smart cutting-tool
-cabinet that lands in India around **₹20 lakh**. Same job, out of about 150 g of filament and
+cabinet that lands in India around **₹20 lakh**. Same job, out of about 140 g of filament and
 roughly ₹2,000 of parts.
 
-<!-- ![shopkeeper NANO](docs/img/hero.jpg) -->
+<p align="center">
+  <img src="docs/img/hero.png" width="100%" alt="shopkeeper NANO, one drawer driven open">
+</p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/cycle.gif" width="100%" alt="a drawer opening and closing"></td>
+<td width="50%"><img src="docs/img/turntable.gif" width="100%" alt="turntable"></td>
+</tr>
+<tr>
+<td align="center"><em>16.69 mm of travel, commanded</em></td>
+<td align="center"><em>92 × 74 × 66 mm, 140 g of filament</em></td>
+</tr>
+</table>
+
+> Every image and animation in this README is rendered from the shipped meshes by
+> [`tools/make_assets.py`](tools/make_assets.py), through a numpy software rasteriser
+> ([`tools/render.py`](tools/render.py)) written for the job because there is no GPU here. The
+> mechanism animation turns the pinion by θ and slides the drawer by `R_P·θ` — the same relation
+> the firmware commands. Nothing is drawn by hand, so if the geometry is wrong the picture is wrong.
 
 | | |
 |---|---|
 | **Machine** | shopkeeper **NANO**, 92 × 74 × 66 mm |
 | **Geometry** | frozen — `nano/*.stl` is what goes on the plate |
 | **Firmware** | 1.0.0, running on the board |
-| **Print** | 2 plates, 12 objects, 145.3 g solid (~124 g sliced) |
+| **Print** | 2 plates, 140 g solid (~119 g sliced) |
+| **Bench** | 60/60 open-close cycles on bay two, no failures, no brownout |
 | **Spec** | [`docs/superpowers/specs/2026-08-08-toolcell-design.md`](docs/superpowers/specs/2026-08-08-toolcell-design.md) |
 | **Lineage** | [`docs/history.md`](docs/history.md) — four superseded generations and what killed each |
 
@@ -74,29 +94,49 @@ doubled the height, because a vertical SG90 costs 26 mm of dead space under ever
 | Case | 92 × 74 × 66 mm |
 | Drawer, each | 39.8 × 59 × 18 mm body (+3 mm anti-tip rib), **36.0 × 54.0 × 16.2 mm** of bin |
 | Deck | 2.5 mm, top face at z 42 |
-| Gearing | module **1.25**, **16 teeth**, 14.5° pressure angle, 6 mm face |
-| Pitch radius | **10.0 mm** |
-| Full travel | **31.42 mm** = π × 10.0 = one **half turn** of the pinion |
-| Travel as shipped | **26.7 mm** — the firmware commands 650–2350 µs = 1700 µs = 153° |
-| Reserve | **4.72 mm** the mechanism can do that the firmware never asks for |
-| Still on the deck | 27.6 mm of a 59 mm drawer at *full* travel |
-| Mass | 145.3 g solid over 2 plates, ~124 g sliced |
+| Gearing | module **1.25**, **10 teeth**, 14.5° pressure angle, 6 mm face |
+| Pitch radius | **6.25 mm** |
+| Full travel | **19.63 mm** = π × 6.25 = one **half turn** of the pinion |
+| Travel as shipped | **16.69 mm** — the firmware commands 650–2350 µs = 1700 µs = 153° |
+| Reserve | **2.94 mm** the mechanism can do that the firmware never asks for |
+| Still on the deck | 39.4 mm of a 59 mm drawer at *full* travel |
+| Mass | 140 g solid over 2 plates, ~119 g sliced |
 
-### Why 26.7 and not 31.4
+### Why 16.69 and not 19.63
 
 An SG90 nominally spans 500–2500 µs for 180°, but clones stall against their own end stop somewhere
 past 160° and cook themselves holding there. So the shipped endpoints deliberately ask for less
 than the mechanism can do:
 
 ```
-span_us / 2000 × 180 = degrees          degrees / 180 × 31.42 = mm of drawer
-650 .. 2350  →  1700 µs  →  153°  →  26.7 mm of the 31.42 available
+span_us / 2000 × 180 = degrees          degrees / 180 × 19.63 = mm of drawer
+650 .. 2350  →  1700 µs  →  153°  →  16.69 mm of the 19.63 available
 ```
 
-26.7 mm opens 45% of a 59 mm drawer, which is enough to reach every slot. The remaining 4.72 mm is
+16.69 mm opens 28% of a 59 mm drawer, which is enough to reach the front row. The remaining 2.94 mm is
 headroom, not a shortfall — and the **Calibrate** panel in the UI jogs each servo live while you
 watch the real drawer, then writes the endpoints to `/data/cal.json`. Set them by eye against the
 printed part, not from this table.
+
+### How it drives
+
+<p align="center">
+  <img src="docs/img/mechanism.png" width="88%" alt="the pinion meshing with the drawer's integral rack">
+</p>
+
+<p align="center">
+  <img src="docs/img/mechanism.gif" width="70%" alt="the pinion turning and driving the rack">
+</p>
+
+A rack and pinion, and the rack is **not a separate part** — the teeth are moulded into a blade
+that hangs off the drawer's own underside. One piece, nothing to peg in, nothing to come loose.
+The drawer body is left out of these two pictures because it sits directly over the mesh and hides
+it completely.
+
+The gear lies flat on a vertical servo shaft, like a turntable, so its teeth face **sideways**. That
+single fact decides the whole layout: a rack cut into a drawer floor would present its teeth
+downward at a gear that never looks that way, and could not have driven anything. The teeth have to
+be on a vertical face, which is why the blade hangs below rather than lying flat.
 
 ### The two details that were nearly fatal
 
@@ -111,14 +151,30 @@ centre-distance error half as big as the pitch radius. The gear pair could never
 
 ---
 
+## Every part
+
+<p align="center">
+  <img src="docs/img/exploded.png" width="76%" alt="exploded view of every part">
+</p>
+
+<p align="center">
+  <img src="docs/img/exploded.gif" width="52%" alt="the cabinet coming apart">
+</p>
+
+Top to bottom: the lid, two drawers each carrying its own toothed blade, the deck the drawers ride
+on with a bore for each gear, the two pinions, the two SG90s in their wells, and the base with the
+ESP32 bay behind them.
+
+---
+
 ## Print it
 
 The meshes in `nano/` are the build. You do not have to run any Python to print.
 
 | Plate | File | Objects | Mass | Colour |
 |---|---|---|---|---|
-| 1 — case | `nano/plates/plate_1_case.3mf` | `case_lower`, `case_upper` | **89.2 g** | white |
-| 2 — mechanism | `nano/plates/plate_2_mechanism.3mf` | `deck`, 2× `drawer`, 2× `rack`, 2× `pinion`, 2× `servo_shim`, `logo_inlay` | **56.1 g** | yellow |
+| 1 — case | `nano/plates/plate_1_case.3mf` | `case_lower`, `case_upper` | **89.3 g** | white |
+| 2 — mechanism | `nano/plates/plate_2_mechanism.3mf` | `deck`, 2× `drawer`, 2× `pinion`, 2× `servo_shim`, `spline_gauge`, `logo_inlay` | **60.0 g** | yellow |
 
 One colour per plate, so a single-nozzle machine makes **zero filament changes** — swap the spool
 between the two prints. Both plates fit a 256 mm bed. A plain `.stl` sits beside each `.3mf`: an
@@ -151,11 +207,10 @@ the machine makes. `pinion` prints gear-face-down with the horn pocket up.
 4. Plug the ESP32-S3 into its breadboard and slide the assembly into the rails at the rear. The
    dovetails are handed: pegs on one wall, notches on the other, so it goes in one way round. The
    twin USB-C ports face the **right-hand** wall, where the window is.
-5. Peg a `rack` up through the floor slot of each `drawer`. The rack is a separate part on purpose
-   — it is the riskiest feature in the design, and this way it is replaceable.
-6. Lay the `deck` on its ledges, drop both drawers on, mesh each rack with its pinion.
-7. `case_upper` goes on over the three alignment pins. No magnets and no screws.
-8. Optional: press `logo_inlay` into the debossed mark on the top face.
+5. Lay the `deck` on its ledges, drop both drawers on, and mesh each drawer's own blade with its
+   pinion. There is no rack to fit — it prints as part of the drawer.
+6. `case_upper` goes on over the three alignment pins. No magnets and no screws.
+7. Optional: press `logo_inlay` into the debossed mark on the top face.
 
 ---
 
@@ -198,9 +253,14 @@ network first and fall back to the AP.
 | SSID | `shopkeeper-NANO` |
 | Password | `forge2026` |
 | URL | **http://192.168.4.1/** |
-| PIN | `2468` |
+| PIN | `2468` — but see below |
 
-The UI locks itself again after two minutes idle. Every open, close, unlock and rejected PIN is
+**The PIN gate ships disabled.** `REQUIRE_PIN = False` in `firmware/config.py`, because it was in
+the way during bench testing. The cabinet as flashed will open either drawer for anyone who loads
+the page, and the UI says `pin bypassed — bench mode` rather than pretending otherwise. Set
+`REQUIRE_PIN = True` before you demo it to anyone, which is the whole argument of the project.
+
+With it on, the UI locks itself again after two minutes idle. Every open, close, unlock and rejected PIN is
 written to an append-only log. `GET /api/state` returns the lot; everything except `/api/state`,
 `/api/unlock` and `/api/lock` returns **403** while the cabinet is locked.
 
@@ -212,6 +272,56 @@ the hardware actually runs:
 ```sh
 .venv/bin/python firmware/mock_server.py --port 8732
 ```
+
+---
+
+## Bench results
+
+Sixty open-close cycles on bay two, driven over HTTP by
+[`tools/bay2_endurance.py`](tools/bay2_endurance.py):
+
+| | |
+|---|---|
+| confirmed open / close | **60 / 60** and **60 / 60** |
+| failures | 0 |
+| reboots | 0 — uptime monotonic across the run |
+| heap | 2,031,248 → 2,023,696 bytes over 120 moves |
+| move time | 1.95 s mean, 3.52 s worst (includes HTTP and poll latency) |
+
+Counting successful POSTs would have proved nothing. `/api/drawer` returns **202** the moment it
+accepts the job and runs the move asynchronously, so a servo that never twitched would still report
+sixty successes. Each cycle is confirmed by polling until `busy` clears **and** the drawer's own
+`open` flag has flipped, and the board's own log is harvested *during* the run because `LOG_MAX` is
+60 while 60 cycles make 120 events. The log independently recorded 121 new events — 60 opens, 60
+closes, and the one parking close that shut the drawer before cycle 1.
+
+One thing that run turned up: the drawer's stored calibration had drifted to **500–2500 µs**, the
+full mechanical span, which drives an SG90 into its own end stops and holds it there at stall
+current. It was reset to the design 650–2350 before testing. If you calibrate by hand, stop short
+of the stops.
+
+---
+
+## Print it faster
+
+For a demonstrator that carries no load, the drawer prints in **13m 01s and 6.73 g** instead of
+20m 00s and 10.52 g — 35% less time, 36% less PLA — with no dimension changed. Import
+`print_profiles/shopkeeper DEMO 0.30.json`, or set four values: layer height 0.30, **1** wall loop,
+**0%** infill, 0.8 mm top and bottom shells.
+
+Measured by running the slicer headless across a sweep
+([`tools/demo_sweep.py`](tools/demo_sweep.py)), not estimated. Three results worth having:
+
+- **Raising print speed does nothing.** Outer wall 200 → 300 → 400 mm/s changed the time by zero
+  seconds; the walls are too short for the head to reach the commanded feedrate.
+- **Cutting lightening holes makes it *slower*** — up to +24% for −22% PLA. Deleting infill that is
+  already 0% saves two seconds, while the broken-up perimeters push travel and retraction from 62 s
+  to 285 s ([`tools/cutout_test.py`](tools/cutout_test.py)).
+- **The shipped "0.24mm Standard" preset slices at 0.20.** It carries no layer height of its own and
+  inherits one from its base.
+
+For a drawer that will hold real steel, use `print_profiles/shopkeeper PROTOTYPE 0.24.json`
+instead — 15m 31s, 8.48 g, two walls.
 
 ---
 
@@ -280,6 +390,12 @@ Two things worth knowing before you do:
 | `firmware/` | MicroPython — servo driver, store, HTTP server, UI, desktop mock |
 | `cad/cabinet.py` `slidebox.py` `mini.py` `toolcell.py` | superseded generations, see [`docs/history.md`](docs/history.md) |
 | `tools/measure_stl.py` | bounding boxes and ray-cast internal cavities of any STL |
+| `tools/render.py` | numpy software rasteriser — z-buffer, three-point lighting, planar shadow |
+| `tools/make_assets.py` | every image and animation in this README, from the shipped meshes |
+| `tools/bay2_endurance.py` | the 60-cycle hardware test |
+| `tools/print_sweep.py` `demo_sweep.py` `cutout_test.py` | headless slicer sweeps |
+| `print_profiles/` | Bambu Studio process presets for demo and prototype prints |
+| `docs/img/` | rendered stills and animations |
 
 ## Bill of materials
 
@@ -289,7 +405,7 @@ Two things worth knowing before you do:
 | SG90 servo (MG90S for a pilot) | 2 | on hand |
 | M2 self-tapping screws, servo flanges | 4 | ~100 |
 | Dupont leads | — | on hand |
-| Filament, ~150 g | — | ~120 |
+| Filament, ~140 g | — | ~120 |
 | 0.91″ SSD1306 OLED, I²C *(optional)* | 1 | ~150 |
 
 Runs off a USB power bank, so it sets up on a meeting table with no socket.
