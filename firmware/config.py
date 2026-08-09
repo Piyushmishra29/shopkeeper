@@ -80,7 +80,8 @@ OLED_SDA      = 1
 OLED_ADDR     = 0x3C
 OLED_FREQ     = 400000
 OLED_CONTRAST = 0x95
-OLED_DWELL    = 2.0        # seconds per attract screen
+OLED_DWELL    = 2.5        # seconds per attract screen; a big numeral
+                           # needs longer to land than a line of text
 
 # ── access ─────────────────────────────────────────────────────────────────
 # This is the whole product thesis in four lines. The ~20 lakh cabinets do

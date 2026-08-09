@@ -93,22 +93,65 @@ def _stagger(ph, i, n, lead=0.55):
     return max(0.0, min(1.0, (ph - a) / lead))
 
 
-def s_nameplate(d, ph, ctx):
+def _claim(d, top, number, under, ph, scale=4):
+    """The house style for a single-fact screen: an inverted rail, one numeral
+    big enough to read across a room, and a caption. A hardware investor gives
+    a panel about ten seconds, so a screen that needs two readings has failed."""
+    rail(d, top)
+    big_c(d, number, 20, scale)
+    e = _ease(min(ph * 1.6, 1.0))
+    half = int(e * 46)
+    if half:
+        d.hline(64 - half, 50, half * 2, 1)
+    if ph > 0.30:
+        txt_c(d, under, 54)
+
+
+# ── 1. who ────────────────────────────────────────────────────────────────
+def s_ident(d, ph, ctx):
     d.fill(0)
     rail(d, "SHOPKEEPER", ctx.get("link", ""))
-    # wordmark drops in, then a highlight sweeps down it
     e = _ease(min(ph * 2.2, 1.0))
-    big_c(d, "NANO", int(2 + 16 * e), 3)
+    big_c(d, "NANO", int(4 + 14 * e), 3)
     if ph > 0.45:
         y = RAIL_H + 4 + int((ph - 0.45) / 0.55 * (H - RAIL_H - 8))
         d.fill_rect(0, y, W, 2, 0)
         d.hline(0, y + 2, W, 1)
-    if ph > 0.3:
-        txt_c(d, "TOOL ACCESS", 52)
+    if ph > 0.35:
+        txt_c(d, "MOTORISED", 44)
+        txt_c(d, "TOOL CABINET", 54)
 
 
+# ── 2. what it does ───────────────────────────────────────────────────────
+def s_what(d, ph, ctx):
+    d.fill(0)
+    rail(d, "WHAT IT DOES")
+    e = _ease(min(ph * 1.8, 1.0))
+    bx, by = 8, 22
+    d.rect(bx + 4, by - 7, 9, 9, 1)
+    d.fill_rect(bx + 6, by - 5, 5, 7, 0)
+    d.fill_rect(bx, by, 17, 13, 1)
+    d.fill_rect(bx + 7, by + 4, 2, 5, 0)
+    if e > 0.15:
+        txt(d, "LOCKED", 34, 20)
+    if e > 0.45:
+        txt(d, "UNTIL", 34, 32)
+    if e > 0.70:
+        d.fill_rect(32, 42, 94, 12, 1)
+        d.text("AUTHORISED", 36, 45, 0)
+
+
+# ── 3. proof it works ─────────────────────────────────────────────────────
+def s_proof(d, ph, ctx):
+    """Measured on the bench, not claimed. This is the screen that matters."""
+    d.fill(0)
+    n = ctx.get("test_cycles", 60)
+    shown = int(_ease(min(ph * 1.7, 1.0)) * n)
+    _claim(d, "VERIFIED", str(shown), "CYCLES  0 FAIL", ph)
+
+
+# ── 4. the hardware is real ───────────────────────────────────────────────
 def s_mechanism(d, ph, ctx):
-    """10-tooth pinion driving the rack, at the true ratio."""
     d.fill(0)
     rail(d, "RACK+PINION", "m1.25")
     N, R, rr = 10, 15, 9
@@ -131,28 +174,41 @@ def s_mechanism(d, ph, ctx):
             d.fb.line(int(x), y + 6, int(x + 2), y, 1)
             d.fb.line(int(x + 2), y, int(x + 4), y + 6, 1)
         x += pitch
-    txt(d, "19.6mm", 56, 18)
-    txt(d, "TRAVEL", 56, 28)
-    # a marker riding the rack, so the linear motion reads as motion
+    txt(d, "DIRECT", 56, 18)
+    txt(d, "DRIVE", 56, 28)
     d.fill_rect(54 + int((ph * 70) % 70), y - 5, 3, 3, 1)
 
 
+# ── 5. how fast it was built ──────────────────────────────────────────────
 def s_hours(d, ph, ctx):
-    """How long it took. The only claim the panel makes."""
     d.fill(0)
-    rail(d, "SHOPKEEPER")
-    txt_c(d, "BUILT IN", 15)
-    n = int(_ease(min(ph * 1.8, 1.0)) * 36)      # counts up to 36 and stops
-    big_c(d, str(n), 25, 4)
-    txt_c(d, "HOURS", 56)
-    half = int(_ease(min(ph * 1.8, 1.0)) * 40)
-    if half:
-        d.hline(64 - half, 53, half * 2, 1)
+    n = int(_ease(min(ph * 1.8, 1.0)) * 36)
+    _claim(d, "BUILT IN", str(n), "HOURS", ph)
 
 
+# ── 6. the moat ───────────────────────────────────────────────────────────
+def s_ledger(d, ph, ctx):
+    d.fill(0)
+    rail(d, "EVERY OPEN", str(ctx.get("events", 0)))
+    log = ctx.get("log", [("1s", "UNLOCKED"), ("2m", "OPENED"), ("3m", "CLOSED")])
+    for i, row in enumerate(log[:3]):
+        e = _stagger(ph, i, 3)
+        if e <= 0:
+            continue
+        y = 15 + i * 12
+        slide = int((1.0 - _ease(e)) * 40)
+        d.fill_rect(2 + slide, y, 3, 8, 1)
+        txt(d, row[0], 8 + slide, y)
+        txt(d, row[1], 48 + slide, y)
+    if ph > 0.75:
+        d.fill_rect(0, 52, W, 12, 1)
+        d.text("LOGGED TO FLASH", 4, 55, 0)
+
+
+# ── 7. live ───────────────────────────────────────────────────────────────
 def s_bays(d, ph, ctx):
     d.fill(0)
-    rail(d, ctx.get("unit", "NANO"), ctx.get("link", ""))
+    rail(d, "LIVE", ctx.get("link", ""))
     st = ctx.get("bays", [("BAY 1", 0.0, "SHUT"), ("BAY 2", 0.0, "SHUT")])
     for i, row in enumerate(st[:2]):
         label, pos, cap = row
@@ -167,96 +223,52 @@ def s_bays(d, ph, ctx):
     d.hline(0, 39, W, 1)
 
 
+# ── 8. engineering depth ──────────────────────────────────────────────────
+def s_precision(d, ph, ctx):
+    """The number that says somebody understood the process, not just the CAD."""
+    d.fill(0)
+    _claim(d, "TOLERANCE", "0.05", "MM PER SIDE", ph, scale=3)
+
+
 def s_travel(d, ph, ctx):
-    """Stroke, drawn as the drawer actually moves it. Out and back."""
     d.fill(0)
     rail(d, "STROKE", "153deg")
     mm = ctx.get("travel_mm", 16.7)
-    pos = _ease(1.0 - abs(1.0 - 2.0 * ph))       # ping-pong
+    pos = _ease(1.0 - abs(1.0 - 2.0 * ph))
     drawer_glyph(d, 22, 16, pos, w=84, h=14)
     bar(d, 8, 36, 112, 9, pos)
     txt_c(d, "%.1f mm" % (mm * pos), 50)
 
 
-def s_register(d, ph, ctx):
-    n = ctx.get("tools", 8)
-    d.fill(0)
-    rail(d, ctx.get("unit", "NANO"), "REGISTER")
-    shown = int(_ease(min(ph * 1.8, 1.0)) * n)
-    big_c(d, str(shown), 14, 4)
-    # one tick per tool, arriving with the count
-    for i in range(n):
-        x = 6 + i * ((W - 12) // max(n, 1))
-        if i < shown:
-            d.fill_rect(x, 48, 6, 4, 1)
-        else:
-            d.rect(x, 48, 6, 4, 1)
-    txt_c(d, "TOOLS LOGGED", 56)
-
-
-def s_stats(d, ph, ctx):
-    d.fill(0)
-    rail(d, ctx.get("unit", "NANO"), "STATUS")
-    rows = (("CYCLES", str(ctx.get("cycles", 0))),
-            ("UPTIME", ctx.get("uptime", "-")),
-            ("HEAP", ctx.get("heap", "-")))
-    for i, kv in enumerate(rows):
-        e = _stagger(ph, i, 3)
-        if e <= 0:
-            continue
-        y = 16 + i * 13
-        txt(d, kv[0], 3, y)
-        v = kv[1]
-        txt_r(d, v[:max(1, int(len(v) * _ease(e)))], y)
-        if i < 2:
-            d.hline(3, y + 9, int((W - 6) * _ease(e)), 1)
-
-
-def s_ledger(d, ph, ctx):
-    """The record. This is the product, so it gets a screen of its own."""
-    d.fill(0)
-    rail(d, "LEDGER", str(ctx.get("events", 0)))
-    log = ctx.get("log", [("1s", "UNLOCKED"), ("2m", "OPENED"), ("3m", "CLOSED")])
-    for i, row in enumerate(log[:3]):
-        e = _stagger(ph, i, 3)
-        if e <= 0:
-            continue
-        y = 16 + i * 15
-        slide = int((1.0 - _ease(e)) * 40)       # rows fly in from the right
-        d.fill_rect(2 + slide, y, 3, 9, 1)
-        txt(d, row[0], 8 + slide, y + 1)
-        txt(d, row[1], 44 + slide, y + 1)
-
-
+# ── 9. what it is made of ─────────────────────────────────────────────────
 def s_spec(d, ph, ctx):
     d.fill(0)
-    rail(d, "SPEC")
-    rows = ("GEAR  m1.25x10T", "DRIVE SG90 x2", "PRINT 140g PLA", "CASE  92x74x66")
+    rail(d, "BILL OF PARTS")
+    rows = ("PRINTED  140g", "SERVOS   2", "MCU      ESP32-S3", "PARTS    12")
     for i, r in enumerate(rows):
         e = _stagger(ph, i, 4)
         if e <= 0:
             continue
-        txt(d, r[:max(1, int(len(r) * _ease(e)))], 3, 15 + i * 12)
+        txt(d, r[:max(1, int(len(r) * _ease(e)))], 3, 16 + i * 12)
 
 
+# ── 10. try it ────────────────────────────────────────────────────────────
 def s_net(d, ph, ctx):
     d.fill(0)
-    rail(d, ctx.get("unit", "NANO"), "LINK")
-    ssid = ctx.get("ssid", "shopkeeper-NANO")
-    txt_c(d, ssid, 18)
+    rail(d, "TRY IT", "LINK")
     ip = _fit(ctx.get("ip", "192.168.4.1"))
-    shown = ip[:max(1, int(len(ip) * _ease(min(ph * 2.0, 1.0))))]   # types out
+    shown = ip[:max(1, int(len(ip) * _ease(min(ph * 2.0, 1.0))))]
     x = (W - len(ip) * 8) // 2
-    d.text(shown, x, 32, 1)
+    txt_c(d, ctx.get("ssid", "shopkeeper-NANO"), 17)
+    d.text(shown, x, 31, 1)
     cx = x + len(shown) * 8
     if int(ph * 6) % 2 == 0 and cx + 6 < W:
-        d.fill_rect(cx + 1, 32, 5, 8, 1)
-    # signal bars climbing in the corner
+        d.fill_rect(cx + 1, 31, 5, 8, 1)
     for i in range(4):
         if ph * 4 > i:
-            d.fill_rect(W - 22 + i * 5, 46 - i * 2 - 2, 3, 4 + i * 2, 1)
+            d.fill_rect(W - 22 + i * 5, 48 - i * 2 - 2, 3, 4 + i * 2, 1)
     if ph > 0.5:
-        txt(d, "OPEN IN", 3, 50)
+        txt(d, "IN A BROWSER", 3, 52)
 
 
 def s_lock(d, ph, ctx):
@@ -273,21 +285,12 @@ def s_lock(d, ph, ctx):
     txt_c(d, "AUTHORISE", 52)
 
 
-def s_moving(d, ph, ctx):
-    """While a drawer actually travels. pos is measured, not animated - this is
-    the one screen that must not lie about where the drawer is."""
-    d.fill(0)
-    label = ctx.get("moving_label", "BAY 1")
-    pos = ctx.get("moving_pos", 0.0)
-    mm = ctx.get("travel_mm", 16.7)
-    rail(d, label, "MOVING")
-    drawer_glyph(d, 22, 16, pos, w=84, h=14)
-    bar(d, 8, 36, 112, 9, pos)
-    txt_c(d, "%.1f mm" % (mm * pos), 50)
-
-
-SCREENS = (s_nameplate, s_mechanism, s_hours, s_bays, s_travel,
-           s_register, s_stats, s_ledger, s_spec, s_net)
+# ORDER IS THE DESIGN. A hardware investor looks for about ten seconds, which
+# at a 2.5 s dwell is four screens - so who / what / does-it-work / is-the-
+# hardware-real all land inside the glance, and the supporting detail follows
+# for anyone still watching.
+SCREENS = (s_ident, s_what, s_proof, s_mechanism, s_hours,
+           s_ledger, s_bays, s_precision, s_spec, s_net)
 
 
 # ── the loop ──────────────────────────────────────────────────────────────

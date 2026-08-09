@@ -109,6 +109,7 @@ def _hud_ctx(app, ip, mode):
                   "OPEN" if x["open"] else "SHUT") for i, x in enumerate(ds)],
         "log": [(_hms(max(0, up - e.get("up", up))), e.get("what", "")[:8])
                 for e in ev[:3]],
+        "test_cycles": 60,
         "moving_label": "BAY 1",
         "moving_pos": 0.0,
     }
