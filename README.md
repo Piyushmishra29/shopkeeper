@@ -308,12 +308,16 @@ fix at about ₹30.
 Every part, in three formats. **The mesh is the same object in all of them** — one generator,
 one export.
 
-| where | format | for |
+### → [**`MODELS/`**](MODELS/) ← everything is in here
+
+| folder | format | for |
 |---|---|---|
-| `nano/*.stl` | STL | printing, and 3D CAM |
-| `cad/export/obj/*.obj` | OBJ | import into almost anything |
-| `nano/plates/*.3mf` | 3MF | slicer-ready plates, orientation baked in |
-| `cad/export/*.dxf` | DXF, mm | flat profiles for laser, waterjet or 2D cut |
+| [**`MODELS/STL/`**](MODELS/STL) | STL | printing, and 3D CAM — **start here** |
+| [`MODELS/OBJ/`](MODELS/OBJ) | OBJ | import into almost anything |
+| [`MODELS/PLATES-3MF/`](MODELS/PLATES-3MF) | 3MF | slicer-ready plates, orientation baked in |
+| [`MODELS/DXF/`](MODELS/DXF) | DXF, mm | flat profiles for laser, waterjet or 2D cut |
+
+[`MODELS/README.md`](MODELS/README.md) lists every part with its size and what it does.
 
 <p align="center">
   <img src="docs/img/exploded_labelled.gif" width="60%" alt="exploded, each part named">
@@ -334,7 +338,7 @@ alternative and is fine for a one-off.
 Regenerate the exports at any time:
 
 ```sh
-.venv/bin/python cad/export_cam.py     # DXF profiles + OBJ
+.venv/bin/python cad/export_cam.py     # rebuilds MODELS/ entirely
 ```
 
 ---
