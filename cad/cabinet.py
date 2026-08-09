@@ -16,7 +16,7 @@ STACK (bottom to top)
 MECHANISM
     Two lids slide sideways on racks driven by SG90 pinions. Lid B rides
     above lid A, so only one bin can be open at a time — which is what
-    ZOLLER's cabinets enforce, and it comes free here.
+    the commercial cabinets enforce too, and it comes free here.
 
     Sliding needs ZERO vertical clearance, so unlike a hinged flap the
     drawer position no longer matters and a servo can never drive into

@@ -3,7 +3,7 @@
 shopkeeper — motorised drawer cabinet.
 
 Each drawer is driven OUT by its own SG90 through a rack and pinion. Type a
-PIN and the drawer you are cleared for slides itself open. ZOLLER's equivalent
+PIN and the drawer you are cleared for slides itself open. the commercial equivalent
 tier only *releases* a drawer and you pull it; this one opens.
 
     head            45   4x4 keypad, 0.91" OLED, tablet cradle

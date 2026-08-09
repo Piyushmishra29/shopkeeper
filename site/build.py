@@ -27,7 +27,7 @@ C = dict(
     gap=0.489, growth=0.20, tip=0.748,
     droop=0.91, neck=2.80, interference=154.89,
     bin_len=51.2, reach=23.7, on_deck=27.6,
-    zoller="20 lakh",
+    incumbent="20 lakh",
 )
 
 
@@ -88,8 +88,8 @@ ENTRIES = [
     dict(n="00", verb="OPENING", title="A tool cabinet that costs a few lakhs, "
          "against one that costs twenty.",
          note="d datasheet · c claim · e estimate · unmarked = printed by a script here",
-         body="""<p class="lede">ZOLLER's &raquo;toolOrganizer&laquo; sells into Indian
-         machine shops at roughly <b>&#8377;{zoller} a cabinet</b>.<sup class="src">c</sup>
+         body="""<p class="lede">Industrial smart tool cabinets sell into Indian
+         machine shops at roughly <b>&#8377;{incumbent} a cabinet</b>.<sup class="src">c</sup>
          This is a working demonstrator of the same idea, built from
          {total} g of PLA, two hobby servos and a &#8377;600 microcontroller.</p>
          <p>Every number on this page was printed by a script in the repository
@@ -111,8 +111,8 @@ ENTRIES = [
     dict(n="02", verb="THE CLAIM", title="The expensive cabinet does not sense "
          "anything either.",
          note="the argument the whole product rests on",
-         body="""<p>No load cells. No cameras. No RFID. Inventory in a
-         &raquo;toolOrganizer&laquo; is <b>trust-based</b><sup class="src">c</sup>
+         body="""<p>No load cells. No cameras. No RFID. Inventory in the
+         commercial cabinets is <b>trust-based</b><sup class="src">c</sup>
          &mdash; the cabinet records that a drawer opened, not what left it.</p>
          <p>What a shop is buying is <b>controlled access and a record of who
          opened what</b>. That is a lock, a database and a screen. It is not

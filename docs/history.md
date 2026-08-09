@@ -67,7 +67,7 @@ Sliding needs **zero vertical clearance**. Drawer position stops mattering, the 
 stall against an obstruction, and the interlock switch and limit stop both disappear from the BOM.
 
 It also gives something for free: the two lids ride at different heights and slide over one
-another, so **only one bin can be open at a time** — which is exactly what ZOLLER's cabinets
+another, so **only one bin can be open at a time** — which is exactly what the commercial cabinets
 enforce.
 
 The cost is that a lid opens about half its bin rather than swinging fully clear. That cost is what

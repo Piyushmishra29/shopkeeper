@@ -190,8 +190,8 @@ h2 { margin: 0 0 4px; font-size: 1.16rem; font-weight: 620; letter-spacing: -.01
     </div>
     <h1>shopkeeper <em>NANO</em></h1>
     <p class="sub">A two-drawer motorised tool cabinet, driven by rack and pinion off
-    two SG90 servos. Built as a sales demonstrator against ZOLLER's
-    &raquo;toolOrganizer&laquo;, which sells into Indian machine shops at roughly
+    two SG90 servos. Built as a sales demonstrator against the industrial smart
+    tool cabinets that sell into Indian machine shops at roughly
     <b>&#8377;20 lakh a cabinet</b>. Everything below is measured off the meshes that
     go to the printer &mdash; not computed from the drawing.</p>
     <div class="stats">

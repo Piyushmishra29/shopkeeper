@@ -1,7 +1,7 @@
 """
 Persistence: calibration, tool register, and the access log.
 
-The log is the product. ZOLLER's cabinet does not sense anything either - no
+The log is the product. The ~20 lakh cabinets do not sense anything either - no
 load cells, no cameras, no RFID - so what a shop is actually buying is a locked
 drawer plus an answer to "who had it last". That answer has to survive a power
 cut, which is the only reason any of this touches flash.

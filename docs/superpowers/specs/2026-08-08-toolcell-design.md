@@ -3,16 +3,16 @@
 **Design spec, rev A — 2026-08-08**
 
 A working two-compartment demonstrator of controlled-access tool storage, built to win a pilot
-against ZOLLER's »toolOrganizer«.
+against the industrial smart tool cabinets.
 
 ---
 
 ## 1. Why this exists
 
-ZOLLER sells the »toolOrganizer«, a smart cutting-tool cabinet, for roughly ₹20 lakh landed in
+the incumbents sell the the commercial cabinet, a smart cutting-tool cabinet, for roughly ₹20 lakh landed in
 India. Research into their published brochure and product pages establishes what that money buys:
 
-| | ZOLLER »toolOrganizer« |
+| | the incumbent the commercial cabinet |
 |---|---|
 | Footprint | 800 × 790 mm |
 | Cabinet heights | 875 / 1175 / 1500 mm |
@@ -32,20 +32,20 @@ They sell **three lock tiers**, and this is the commercially important part:
 
 ### The finding that shapes this project
 
-**ZOLLER's inventory is trust-based. There are no sensors.** No load cells, no cameras, no RFID on
+**their inventory is trust-based. There are no sensors.** No load cells, no cameras, no RFID on
 the tools. The system knows stock only because it locked everything except the one box it told you
 to open, and then assumed you took the quantity the software displayed. A manual "stock adjustment"
 function exists precisely because reality drifts. Minimum/maximum levels drive reordering.
 
 The moat is therefore **mechanical access control + a good database + a 3D UI** — not sensing.
 
-The software stack is `z.One` (central tool database) → `TMS Tool Management Solutions` (cost
-centres, user groups, per-group quantity limits, reorder triggers) → `quickPick` (the shopfloor
+The software stack is a central tool database (central tool database) → `TMS Tool Management Solutions` (cost
+centres, user groups, per-group quantity limits, reorder triggers) → `the pick client` (the shopfloor
 kiosk that drives the LEDs and locks).
 
 ### The opportunity
 
-The cabinet is the cheap half. TMS is what commands the price. But ZOLLER is priced for German
+The cabinet is the cheap half. TMS is what commands the price. But these systems are priced for German
 tier-1 automotive suppliers, and most Indian job shops will never buy at ₹20 lakh. A ₹4–5 lakh
 system doing 80% of the job addresses a real, unserved market.
 
@@ -72,7 +72,7 @@ A self-contained, portable, mains-or-powerbank-powered demonstrator:
 
 - Any form of automatic counting or weighing.
 - A real database, server, or ERP integration.
-- 3D graphical rendering of the drawer (ZOLLER's quickPick does this; v1 uses a clear 2D plan view).
+- 3D graphical rendering of the drawer (the commercial pick client does this; v1 uses a clear 2D plan view).
 - RFID. PIN was chosen deliberately for zero additional hardware. RFID is a ₹150 drop-in later.
 - A steel enclosure. v1 is fully 3D-printed.
 
@@ -232,7 +232,7 @@ its own weight. If it does not, ream the bore before applying power.
 
 **The drawer must be fully extended before any flap opens.** The flap swings up and back over the
 hinge carrier; with the drawer pushed in, the bay above it is in the way. This is not a defect —
-ZOLLER's cabinets work the same way, releasing one drawer at a time and committing the transaction
+the commercial cabinets work the same way, releasing one drawer at a time and committing the transaction
 on drawer close.
 
 For v1 the kiosk simply instructs the operator to pull the drawer out first, and the flap will not
@@ -382,7 +382,7 @@ Single-page, served from flash, no external assets — it must work with no inte
   quantity stepper clamped to `min(maxPerPick, user.limit)`. Cells the operator may not draw are
   greyed with an explicit reason, never hidden.
 - **Plan view.** A simple 2D top-down plan of the four compartments. The target cell pulses. This is
-  the honest, legible answer to ZOLLER's 3D view; a bad 3D view is worse than a good 2D one.
+  the honest, legible answer to the commercial 3D view; a bad 3D view is worse than a good 2D one.
 - **Live state.** Driven by server-sent events, so the screen tracks the physical flap without
   polling.
 - **Log view.** The last 20 transactions, in plain view. **This is the screen that sells the
@@ -440,7 +440,7 @@ reaches the servo. Add a counterweight behind the hinge — roughly 40 g, two M8
 pocket — and the flap still opens itself when the bolt clears, with no spring. This gives both
 properties with one servo, at the cost of one more printed part.
 
-**Mirror ZOLLER's price ladder.** Entry tier is one solenoid per *drawer* plus LEDs — ten actuators
+**Mirror the incumbent price ladder.** Entry tier is one solenoid per *drawer* plus LEDs — ten actuators
 for a whole cabinet, cheap, and adequate for most shops. Premium tier is a servo per *compartment*.
 Quote the entry tier; demo the premium tier.
 
@@ -456,13 +456,13 @@ Quote the entry tier; demo the premium tier.
 | Assembly labour | ₹30k |
 | **Hardware total** | **≈ ₹1.4 lakh** |
 
-Against ZOLLER's ~₹20 lakh, a ₹4–5 lakh sale price gives a 4–5× undercut with healthy margin.
+Against the incumbent ~₹20 lakh, a ₹4–5 lakh sale price gives a 4–5× undercut with healthy margin.
 
 **These figures are estimates and have not been quoted.** Get a real fabricator quote before any of
 them appear in front of a customer.
 
 **The real work is software.** Cost centres, reorder triggers, per-group budgets, CAM and presetter
-integration — that is what ZOLLER charges for and what a serious competitor has to build.
+integration — that is what the incumbents charge for and what a serious competitor has to build.
 
 ---
 

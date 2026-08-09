@@ -6,9 +6,8 @@ Type a PIN on your phone and the one drawer you are cleared for slides itself op
 need, push it shut, and the pick is logged against your name. Try the other drawer and nothing
 moves.
 
-Built as a working demonstrator to pitch against ZOLLER's »toolOrganizer« — a smart cutting-tool
-cabinet that lands in India around **₹20 lakh**. Same job, out of about 140 g of filament and
-roughly ₹2,000 of parts.
+Built as a working demonstrator to pitch against the industrial smart tool cabinets that land in
+India around **₹20 lakh**. Same job, out of about 140 g of filament and roughly ₹2,000 of parts.
 
 <p align="center">
   <img src="docs/img/hero.png" width="100%" alt="shopkeeper NANO, one drawer driven open">
@@ -45,28 +44,28 @@ roughly ₹2,000 of parts.
 
 ## The argument
 
-ZOLLER sells the »toolOrganizer« for roughly ₹20 lakh landed in India. It is a serious machine:
+The established smart tool cabinets land in India at roughly ₹20 lakh. They are serious machines:
 800 × 790 mm on the floor, drawers rated 80 kg, up to 48 compartments per drawer, nine cabinets
 daisy-chained per controller, three lock tiers rising to a per-compartment electronic flap.
 
 The finding that shapes this whole project is this:
 
-> **ZOLLER senses nothing.** No load cells, no cameras, no RFID on the tools. Inventory is
+> **They sense nothing.** No load cells, no cameras, no RFID on the tools. Inventory is
 > trust-based. The system knows stock because it locked everything except the one box it told you
 > to open, and then assumed you took the quantity on the screen. There is a manual *stock
 > adjustment* function precisely because reality drifts.
 
 So the moat is not sensing. It is **mechanical access control plus a record of who opened what**,
-sitting on top of a good tool database. The cabinet is the cheap half; the software (`z.One` →
-`TMS` → `quickPick`) is what commands the price.
+sitting on top of a good tool database. The cabinet is the cheap half; the software stack — central
+tool database, cost centres and user groups, shopfloor pick client — is what commands the price.
 
 That is why a ₹2,000 machine can stand in a room next to a ₹20 lakh one and make an argument. It
 does the mechanically honest part — a drawer that is locked until you are cleared, and a log that
 says who opened it — and it claims nothing beyond that. **It does not count anything**, and the UI
 says so rather than implying a measurement it never takes.
 
-ZOLLER is priced for German tier-1 automotive suppliers. Most Indian job shops will never buy at
-₹20 lakh. A system doing 80% of the job at ₹4–5 lakh addresses a real, unserved market, and this is
+These systems are priced for European tier-1 automotive suppliers. Most Indian job shops will never
+buy at ₹20 lakh. A system doing 80% of the job at ₹4–5 lakh addresses a real, unserved market, and this is
 the door-opener that gets you into the room to talk about it.
 
 ---
@@ -275,6 +274,34 @@ the hardware actually runs:
 
 ---
 
+## The terminal
+
+<p align="center">
+  <img src="docs/img/ui_terminal.png" width="100%" alt="the operator terminal">
+</p>
+
+A machine HMI, not a web app: a live section drawing of each bay with the drawer at its measured
+position, the tool register, and an append-only event ledger. Served off the ESP32 itself as a
+single 40 KB file with **no CDN, no framework and no network call of any kind** — it has to work in
+a meeting room where the cabinet is the only thing on the network.
+
+<table>
+<tr>
+<td width="42%" valign="top"><img src="docs/img/ui_locked.png" width="100%" alt="the PIN gate"></td>
+<td width="58%" valign="top"><img src="docs/img/ui_mobile.png" width="100%" alt="the terminal on a phone"></td>
+</tr>
+<tr>
+<td align="center"><em>the gate — the whole product, in one screen</em></td>
+<td align="center"><em>and on the phone that actually opens it</em></td>
+</tr>
+</table>
+
+Shot by [`tools/shoot_ui.py`](tools/shoot_ui.py) against `firmware/mock_server.py`, which imports
+the real `firmware/config.py` — so the register, PIN, timeouts and servo endpoints on screen are the
+ones the hardware runs.
+
+---
+
 ## Bench results
 
 Sixty open-close cycles on bay two, driven over HTTP by
@@ -394,6 +421,7 @@ Two things worth knowing before you do:
 | `tools/make_assets.py` | every image and animation in this README, from the shipped meshes |
 | `tools/bay2_endurance.py` | the 60-cycle hardware test |
 | `tools/print_sweep.py` `demo_sweep.py` `cutout_test.py` | headless slicer sweeps |
+| `tools/shoot_ui.py` | terminal screenshots via headless Chromium |
 | `print_profiles/` | Bambu Studio process presets for demo and prototype prints |
 | `docs/img/` | rendered stills and animations |
 
@@ -417,8 +445,8 @@ original spec's 4×4 keypad disappeared from the BOM.
 ## What it deliberately isn't
 
 **It does not count anything.** Stock decrements because the software said you would take two.
-Worth repeating, because it is the crux of the pitch rather than an apology: ZOLLER works the same
-way. Their inventory is trust-based, with no sensors anywhere in the product. The moat is access
+Worth repeating, because it is the crux of the pitch rather than an apology: the ₹20 lakh cabinets
+work the same way. Their inventory is trust-based, with no sensors anywhere in the product. The moat is access
 control and the database, not sensing — so the honest thing is to build exactly that and say so.
 
 There is also no drawer-position switch in v1. The firmware assumes a commanded move completed. A
@@ -426,5 +454,5 @@ microswitch is the correct fix and a ₹30 part.
 
 ## Licence
 
-MIT for the code and models. ZOLLER, Ryobi and DeWALT are trademarks of their respective owners and
-this project is not affiliated with any of them.
+MIT for the code and models. All trademarks referenced are the property of their respective owners
+and this project is not affiliated with any of them.

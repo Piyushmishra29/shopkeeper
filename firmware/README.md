@@ -7,7 +7,7 @@ Tested on the board in hand: **ESP32-S3, MicroPython 1.28.0**, 2.0 MB free heap.
 
 ## What it does, and why that
 
-ZOLLER's »toolOrganizer« — the ~₹20 lakh cabinet this is pitched against — does
+The industrial smart tool cabinets this is pitched against — the ~₹20 lakh ones — do
 not sense anything. No load cells, no cameras, no RFID. Inventory is
 trust-based. What a machine shop is actually buying is **a locked drawer and a
 record of who opened it**, so that is exactly what this implements:
