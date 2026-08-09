@@ -32,6 +32,7 @@ class App:
         self.unlocked_at = 0
         self.boot_at = time.time()
         self.net = "-"
+        self.cmd = None
         self.limits = {}      # {drawer_id: {"low": us, "high": us}}
         self.cal_dir = {}     # which end each drawer is currently searching
 
@@ -252,9 +253,19 @@ async def handle(app, r, w):
 
 
 async def _run_move(app, d, want, tool):
+    # Tell the panel a command arrived from the network BEFORE moving, so the
+    # screen leads the drawer. The scripted demo drives Servo.move() directly
+    # and never lands here, which is what keeps "somebody pressed a button"
+    # distinguishable from "the cabinet is performing".
+    app.cmd = {"id": d.id, "label": "BAY " + str(d.id + 1),
+               "verb": "OPENING" if want else "SECURING",
+               "pos": d.pos, "done": False, "at": time.time()}
     await d.move(want)
     app.log.add("OPENED" if want else "CLOSED", d.id, tool or "")
     app.log.maybe_flush()
+    app.cmd = {"id": d.id, "label": "BAY " + str(d.id + 1),
+               "verb": "OPEN" if want else "SECURED",
+               "pos": 1.0 if want else 0.0, "done": True, "at": time.time()}
 
 
 async def serve(app, port=80):

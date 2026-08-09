@@ -69,6 +69,17 @@ TRAVEL_MS = 1100
 # signal once the move has settled.
 DETACH_AFTER_MS = 450
 
+# ── scripted demo ──────────────────────────────────────────────────────────
+# An unattended performance for a table: hold a card, open one bay, open the
+# other, secure both, then hand back to the attract loop. Runs itself at boot
+# so the cabinet does something the moment it is powered, and can be re-armed
+# from the terminal with POST /api/demo.
+DEMO          = True
+DEMO_HOLD_S   = 15      # the card sits this long before anything moves
+DEMO_DWELL_S  = 3       # pause with a bay open, so the eye catches up
+DEMO_LOOP     = True    # run again after finishing
+DEMO_GAP_S    = 25      # attract loop gets this long between performances
+
 # ── bench record ───────────────────────────────────────────────────────────
 # What the VERIFIED screen shows. These are not aspirational: each number is
 # the confirmed total from tools/bay2_endurance.py runs, whose JSON reports are

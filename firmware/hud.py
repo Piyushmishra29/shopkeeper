@@ -290,6 +290,64 @@ def s_lock(d, ph, ctx):
 # at a 2.5 s dwell is four screens - so who / what / does-it-work / is-the-
 # hardware-real all land inside the glance, and the supporting detail follows
 # for anyone still watching.
+def _wifi(d, x, y, bars=3):
+    """Little signal mark, so the source of the command is unmistakable."""
+    for i in range(bars):
+        d.fill_rect(x + i * 4, y + 6 - i * 3, 3, 3 + i * 3, 1)
+
+
+def s_web(d, ph, ctx):
+    """Somebody just pressed a button on the terminal. Say so, loudly.
+
+    The point of the whole machine is that access is commanded and recorded,
+    so the one moment worth a full screen is the moment a command arrives from
+    outside. Anyone watching the cabinet should see the phone take control
+    without being told that is what happened."""
+    c = ctx.get("cmd") or {}
+    d.fill(0)
+    d.fill_rect(0, 0, W, RAIL_H, 1)
+    d.text("WEB CONTROL", 3, 2, 0)
+    _wifi(d, W - 18, 2)
+    big_c(d, c.get("label", "BAY 1"), 15, 2)
+    pos = c.get("pos", 0.0)
+    drawer_glyph(d, 22, 34, pos, w=84, h=12)
+    bar(d, 8, 49, 112, 7, pos)
+    verb = c.get("verb", "OPENING")
+    if c.get("done"):
+        # flash the outcome so a finished command is unmistakable
+        if int(ph * 6) % 2 == 0:
+            d.fill_rect(0, 0, W, RAIL_H, 1)
+            d.text(verb, (W - len(verb) * 8) // 2, 2, 0)
+    else:
+        d.text(verb, (W - len(verb) * 8) // 2, 2, 0)
+
+
+def s_demo(d, ph, ctx):
+    """Narrates the scripted demo. Whatever is on this screen is what the
+    machine is doing at that instant - the stage is set by the demo task before
+    it moves, never after, so the panel leads the drawer rather than trailing
+    it. A demo screen that lags the hardware reads as a fake."""
+    dm = ctx.get("demo") or {}
+    stage = dm.get("stage", "READY")
+    d.fill(0)
+    rail(d, "AUTO DEMO", dm.get("tag", ""))
+    if stage == "HOLD":
+        left = dm.get("left", 0)
+        big_c(d, str(int(left)), 18, 4)
+        txt_c(d, "STARTING IN", 52)
+        w = int((W - 8) * max(0.0, min(1.0, dm.get("frac", 0.0))))
+        d.fill_rect(4, 60, w, 3, 1)
+    elif stage in ("OPEN", "CLOSE"):
+        txt_c(d, dm.get("label", "BAY 1"), 15)
+        pos = dm.get("pos", 0.0)
+        drawer_glyph(d, 22, 25, pos, w=84, h=14)
+        bar(d, 8, 44, 112, 8, pos)
+        txt_c(d, "OPENING" if stage == "OPEN" else "SECURING", 55)
+    else:
+        big_c(d, "READY", 20, 2)
+        txt_c(d, "TOOL ACCESS CONTROL"[:16], 48)
+
+
 SCREENS = (s_ident, s_what, s_proof, s_mechanism, s_hours,
            s_ledger, s_bays, s_precision, s_spec, s_net)
 

@@ -116,17 +116,100 @@ def _hud_ctx(app, ip, mode):
     }
 
 
-async def _display(app, d, ip, mode):
-    """Attract loop at rest; live state whenever there is any.
+async def _demo(app):
+    """The unattended performance: hold a card, open bay one, open bay two,
+    secure both, hand back to the attract loop.
 
-    Never allowed to take the cabinet down: any exception here parks the screen
-    and returns, because the drawer is the product and the screen is provision."""
-    loop = hud.Loop(d, dwell=config.OLED_DWELL)
-    try:
+    app.demo is set BEFORE each move and cleared after, so the panel always
+    leads the hardware. It drives the servos through the same Servo.move() the
+    HTTP handler uses and writes the same log entries, so a demo open is a real
+    open - the ledger does not get a special case it can lie in."""
+    await asyncio.sleep(2)
+    while True:
+        # Stand down while a person is driving. Two things moving the same
+        # drawer for different reasons is how a demo embarrasses you.
+        while getattr(app, "cmd", None):
+            await asyncio.sleep_ms(300)
+        t0 = time.time()
         while True:
+            if getattr(app, "cmd", None):
+                break                                # somebody took over
+            left = config.DEMO_HOLD_S - (time.time() - t0)
+            if left <= 0:
+                break
+            app.demo = {"stage": "HOLD", "left": left + 1,
+                        "frac": 1.0 - left / config.DEMO_HOLD_S,
+                        "tag": "%ds" % int(left + 1)}
+            await asyncio.sleep_ms(200)
+
+        for i, dr in enumerate(app.drawers):          # open one, then the other
+            app.demo = {"stage": "OPEN", "label": "BAY " + str(i + 1),
+                        "pos": dr.pos, "tag": "%d/%d" % (i + 1, len(app.drawers))}
+            await dr.move(True)
+            app.log.add("OPENED", dr.id, "demo")
+            app.demo = {"stage": "OPEN", "label": "BAY " + str(i + 1),
+                        "pos": 1.0, "tag": "OPEN"}
+            await asyncio.sleep(config.DEMO_DWELL_S)
+
+        for i, dr in enumerate(app.drawers):          # then put it all back
+            app.demo = {"stage": "CLOSE", "label": "BAY " + str(i + 1),
+                        "pos": dr.pos, "tag": "SECURE"}
+            await dr.move(False)
+            app.log.add("CLOSED", dr.id, "demo")
+            app.demo = {"stage": "CLOSE", "label": "BAY " + str(i + 1),
+                        "pos": 0.0, "tag": "SECURE"}
+            await asyncio.sleep(1)
+
+        app.demo = None
+        if not config.DEMO_LOOP:
+            return
+        await asyncio.sleep(config.DEMO_GAP_S)        # attract loop takes over
+
+
+async def _display(app, d, ip, mode):
+    """Runs forever. Never stops, never blanks.
+
+    The first version wrapped the whole loop in one try/except and called
+    poweroff() on the way out - so a single bad frame killed the panel until
+    the next reboot, which is exactly the "goes black after a while" symptom.
+    A display task that can die is worse than no display task: the cabinet
+    looks broken while working perfectly.
+
+    Now each frame is guarded on its own, a run of failures re-attaches the
+    panel rather than giving up, and there is no code path that turns it off.
+    The module browns out and latches under load - see sh1106.py - so losing
+    it for a few seconds is normal and recovery has to be automatic."""
+    loop = hud.Loop(d, dwell=config.OLED_DWELL)
+    fails = 0
+    while True:
+        try:
             ctx = _hud_ctx(app, ip, mode)
+            ctx["demo"] = getattr(app, "demo", None)
+            # PRIORITY. A person pressing a button beats everything the
+            # cabinet does of its own accord - including the scripted demo.
+            # Whatever is on the panel, a web command takes it over at once and
+            # holds it until the move finishes plus four seconds, so the
+            # outcome is seen and not just the motion.
+            #   web command  >  scripted demo  >  moving  >  locked  >  attract
+            cmd = getattr(app, "cmd", None)
+            if cmd:
+                live = [sv for sv in app.drawers if sv.id == cmd.get("id")]
+                if live and live[0].busy:
+                    cmd["pos"] = live[0].pos
+                if (not cmd.get("done")) or (time.time() - cmd.get("at", 0)) < 4:
+                    ctx["cmd"] = cmd
+                    loop.tick(ctx, hud.s_web)
+                    fails = 0
+                    await asyncio.sleep_ms(50)
+                    continue
+                app.cmd = None
+            if ctx["demo"]:
+                loop.tick(ctx, hud.s_demo)          # the script owns it next
+                fails = 0
+                await asyncio.sleep_ms(60)
+                continue
             over = None
-            for i, x in enumerate(d and [s.state() for s in app.drawers] or []):
+            for i, x in enumerate([sv.state() for sv in app.drawers]):
                 if x["busy"]:
                     ctx["moving_label"] = "BAY " + str(i + 1)
                     ctx["moving_pos"] = x["pos"]
@@ -135,13 +218,24 @@ async def _display(app, d, ip, mode):
             if over is None and app.locked:
                 over = hud.s_lock
             loop.tick(ctx, over)
+            fails = 0
             await asyncio.sleep_ms(40 if over else 90)
-    except Exception as e:
-        print("display stopped:", e)
-        try:
-            d.poweroff()
-        except Exception:
-            pass
+        except Exception as e:
+            fails += 1
+            if fails in (1, 25):
+                print("display hiccup (%d):" % fails, e)
+            if fails >= 25:
+                # the panel has probably browned out and latched; rebuild it
+                try:
+                    nd = sh1106.attach()
+                    if nd:
+                        d = nd
+                        loop = hud.Loop(d, dwell=config.OLED_DWELL)
+                        fails = 0
+                        print("display re-attached")
+                except Exception:
+                    pass
+            await asyncio.sleep_ms(400)
 
 
 async def _amain():
@@ -172,6 +266,10 @@ async def _amain():
 
     await serve(app)
     asyncio.create_task(_housekeeping(app))
+    app.demo = None
+    if getattr(config, "DEMO", False):
+        asyncio.create_task(_demo(app))
+        print("demo: scripted, %ds hold then both bays" % config.DEMO_HOLD_S)
 
     if disp:
         # Boot card. Uses SCREENS[0] rather than naming a screen: the set gets
