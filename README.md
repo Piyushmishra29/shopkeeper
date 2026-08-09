@@ -1,4 +1,6 @@
-# shopkeeper
+<p align="center">
+  <img src="docs/img/banner.png" width="100%" alt="shopkeeper NANO — a motorised tool cabinet">
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-working%20demonstrator-FF8A1E?style=flat-square&labelColor=1F2124" alt="status">
