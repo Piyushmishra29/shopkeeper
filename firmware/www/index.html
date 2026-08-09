@@ -487,6 +487,24 @@ function elevation(d){
     /* mech bay floor datum, run out past the case so it reads as a datum */
     '<line x1="'+(x0-8)+'" y1="'+floorY+'" x2="'+(x0+cw+66)+'" y2="'+floorY+'" '+
       'stroke="#2E353B" stroke-width="1"/>'+
+    /* THE MECH BAY IS NOT EMPTY. It read as a large void under the deck,
+       which is neither true nor useful - a section that leaves out half of
+       what it cuts through is a diagram, not a section. Both of these are
+       drawn at their measured size in the same scale as everything else. */
+    /* SG90, upright, shaft vertical, 12.2 deep x 22.7 tall on a 6 mm pedestal */
+    '<rect x="'+X(GEO.pin_y+6.1).toFixed(2)+'" y="'+Z(6.0+22.7).toFixed(2)+
+      '" width="'+(12.2*K).toFixed(2)+'" height="'+(22.7*K).toFixed(2)+
+      '" fill="#171D2E" stroke="#39445E" stroke-width="0.9" rx="1"/>'+
+    '<text x="'+X(GEO.pin_y).toFixed(2)+'" y="'+Z(14).toFixed(2)+
+      '" fill="#4E5A78" font-family="ui-monospace,Menlo,monospace" '+
+      'font-size="7" text-anchor="middle">SG90</text>'+
+    /* the electronics bay: the 15 mm the case has behind the drawer */
+    '<rect x="'+(x0+1).toFixed(2)+'" y="'+Z(27.0).toFixed(2)+
+      '" width="'+((GEO.cd-GEO.dr_d-1)*K).toFixed(2)+'" height="'+(27.0*K-1).toFixed(2)+
+      '" fill="#14181B" stroke="#2E353B" stroke-width="0.8" rx="1"/>'+
+    '<text x="'+(x0+3).toFixed(2)+'" y="'+Z(11).toFixed(2)+
+      '" fill="#4A545B" font-family="ui-monospace,Menlo,monospace" '+
+      'font-size="7">ESP</text>'+
     /* deck: the drawer rides on this, and it is slotted for the pinion */
     '<rect x="'+x0+'" y="'+deckY.toFixed(2)+'" width="'+cw.toFixed(2)+
       '" height="'+deckH.toFixed(2)+'" fill="#1B2024" stroke="#2E353B" '+
