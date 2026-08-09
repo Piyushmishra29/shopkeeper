@@ -400,29 +400,34 @@ document.addEventListener("keydown", function(e){
 
    Verified against cad/nano.py P dict, 2026-08-09.                        */
 var GEO = {
+  /* MEASURED AGAINST cad/nano.py, 2026-08-09. Five of these had drifted and
+     the section drew a machine that does not exist: ch 58 (really 66), deck_z
+     29.5 (39.5), dr_h 20 (18), dr_floor 4.0 (1.8), pin_y 12.3 (17.6). With the
+     deck 10 mm low and the case 8 mm short, the drawer rendered outside its own
+     outline and the pinion hung off the bottom edge. checkGeo() below only
+     compares travel, which agreed the whole time - it was never going to catch
+     a wrong case height. */
   cd:       74.0,   /* P["cd"]       case depth - the axis the drawer runs on */
-  ch:       58.0,   /* P["ch"]       case height (was 66 before the one-piece
-                                     drawer put the teeth in its own floor)   */
-  deck_z:   29.5,   /* P["deck_z"]   deck underside                           */
+  ch:       66.0,   /* P["ch"]       case height                              */
+  deck_z:   39.5,   /* P["deck_z"]   deck underside                           */
   deck_t:    2.5,   /* P["deck_t"]                                            */
   dr_d:     59.0,   /* P["dr_d"]     drawer depth                             */
-  dr_h:     20.0,   /* P["dr_h"]                                              */
-  dr_floor:  4.0,   /* P["dr_floor"] the rack teeth are cut UP into this      */
+  dr_h:     18.0,   /* P["dr_h"]                                              */
+  dr_floor:  1.8,   /* P["dr_floor"] the rack teeth are cut UP into this      */
   module:   1.25,   /* P["module"]                                            */
-  teeth:      10,   /* P["teeth"]  10, not 16 - the page advertised a gear    */
-                    /*             the machine has not had for two revisions   */
+  teeth:      10,   /* P["teeth"]                                             */
   add_f:     0.8,   /* P["add_f"]    stub addendum, 0.8m not 1.0m             */
-  pin_y:    12.3    /* PIN_Y         pinion axis, measured back from the mouth */
+  pin_y:    17.6    /* PIN_Y         pinion axis, measured back from the mouth */
 };
 /* the same derivations nano.py does, in the same order */
-GEO.deck    = GEO.deck_z + GEO.deck_t;              /* 32.0  deck top face    */
-GEO.dr_und  = GEO.deck + 0.2;                       /* 32.2  DR_UND           */
-GEO.r_p     = GEO.module * GEO.teeth / 2;           /* 10.0  R_P              */
+GEO.deck    = GEO.deck_z + GEO.deck_t;              /* 42.0  deck top face    */
+GEO.dr_und  = GEO.deck + 0.2;                       /* 42.2  DR_UND           */
+GEO.r_p     = GEO.module * GEO.teeth / 2;           /*  6.25 R_P              */
 GEO.add     = GEO.add_f * GEO.module;               /*  1.0  ADD              */
-GEO.r_tip   = GEO.r_p + GEO.add;                    /* 11.0  R_TIP            */
-GEO.pitch_z = GEO.dr_und + GEO.add;                 /* 33.2  PITCH_Z          */
-GEO.axis_z  = GEO.pitch_z - GEO.r_p;                /* 23.2  AXIS_Z           */
-GEO.travel  = Math.PI * GEO.r_p;                    /* 31.42 TRAVEL, full     */
+GEO.r_tip   = GEO.r_p + GEO.add;                    /*  7.25 R_TIP            */
+GEO.pitch_z = GEO.dr_und + GEO.add;                 /* 43.2  PITCH_Z          */
+GEO.axis_z  = GEO.pitch_z - GEO.r_p;                /* 36.95 AXIS_Z           */
+GEO.travel  = Math.PI * GEO.r_p;                    /* 19.63 TRAVEL, full     */
 /* The drawer's front face is FLUSH with the case mouth at rest - nano.py's
    drawer() sets y0=0.0, "front face flush with the case". The 15 mm the case
    has over the drawer is the electronics bay BEHIND it, not a gap in front. */
@@ -664,7 +669,7 @@ function buildCal(){
     return ["closed_us","open_us"].map(function(k){
       return '<div class="crow"><div class="lbl">Bay 0'+(i+1)+' '+
         (k === "closed_us" ? "secured" : "released")+'</div>'+
-        '<input type="range" min="500" max="2500" step="10" value="'+d[k]+
+        '<input type="range" min="600" max="2400" step="10" value="'+d[k]+
         '" data-id="'+d.id+'" data-k="'+k+'"><output>'+d[k]+' µs</output></div>';
     }).join("");
   }).join("") +
@@ -674,6 +679,12 @@ function buildCal(){
   GEO.travel.toFixed(1)+' mm of travel at a full 180&deg; (&pi; &times; the '+
   GEO.r_p.toFixed(1)+' mm pitch radius), and most SG90 units stall against '+
   'their own end stop before reaching it.</div>';
+  /* The sliders run 600..2400, not the servo's full 500..2500. Every input
+     event writes to flash, so the extremes of this control were reachable by
+     one stray drag - and 500..2500 is 180 degrees, which drives an SG90 into
+     its own end stop and holds it there at stall current. That setting came
+     back four separate times during the build and had to be deleted each
+     time. The range no longer contains a value that can cook the servo. */
   [].forEach.call($("cal").querySelectorAll("input"), function(r){
     var out = r.nextElementSibling;
     r.oninput = function(){
