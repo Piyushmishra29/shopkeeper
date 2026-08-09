@@ -58,6 +58,34 @@ India around **₹20 lakh**. Same job, out of about 140 g of filament and roughl
 
 ---
 
+## Why it exists
+
+A machine shop bleeds tooling. Not dramatically — a carbide end mill walks off, nobody
+remembers who had it last, and the shop buys another. Nobody is stealing; nobody is keeping
+a record either. Multiply by a year and it is a real number, and it never appears on any
+report because there is nothing generating one.
+
+The cabinets that fix this land in India around **₹20 lakh**. Most job shops will never buy
+at that price, so they carry the loss instead — which means the problem is not unsolved, it
+is unsold.
+
+Then the part that decides this whole project:
+
+> **Those cabinets do not sense anything.** No load cells, no cameras, no RFID on the tools.
+> They lock every drawer except the one you are cleared for, log that you opened it, and
+> assume you took what the screen said. Stock is trust plus a record.
+
+If that is the mechanism, the ₹20 lakh is not buying measurement. It is buying a lock, a
+motor, and a database — and the deterrent is the record, not the sensing. Nobody walks off
+with a tool their name is attached to.
+
+So this is exactly that, and nothing more: a drawer that stays shut until you are cleared,
+and a log that says who opened it. **It counts nothing, and it says so** rather than implying
+a measurement it never takes. 140 g of filament and about ₹2,000 of parts, built in 36 hours
+to make the argument in a room rather than on a slide.
+
+---
+
 ## The machine that exists
 
 <p align="center">
