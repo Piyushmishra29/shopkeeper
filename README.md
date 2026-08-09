@@ -198,6 +198,49 @@ Regenerate the exports at any time:
 
 ---
 
+## Scaling it
+
+Two drawers is the demonstrator. Nothing about the approach is limited to two, and the reason
+is the same rule that makes it secure: **only one drawer is ever open.** That single constraint
+is what keeps a hundred-drawer wall cheap to power and simple to reason about.
+
+| | drawers | actuation | power | what changes |
+|---|---|---|---|---|
+| **demonstrator** | 2 | 2 × SG90 direct from the board | USB power bank | — |
+| **one cabinet** | 16 | 1 × PCA9685, 16 channels over I²C | 5 V 3 A | one driver board, same firmware loop |
+| **a bay of cabinets** | 100+ | 7 × PCA9685 on one I²C bus | 5 V 5 A | addressing, not architecture |
+| **a shop** | 32 cabinets | one controller each | local | a server that aggregates the logs |
+
+### Why the power does not scale with the drawers
+
+An SG90 pulls about 700 mA while it moves and nothing at all when it is detached — the firmware
+already cuts the signal once a move settles. Because access control means **one drawer at a
+time**, the worst case is one servo moving plus a hundred sitting idle, not a hundred moving.
+A hundred-drawer wall draws about what this two-drawer box does.
+
+That is not a lucky coincidence. The security model and the power budget are the same
+constraint viewed twice.
+
+### What actually gets harder
+
+The mechanism scales by repetition. The hard parts are elsewhere, and they are all software:
+
+- **Identity.** A 4-digit PIN does not survive fifty operators. It becomes an RFID badge or a
+  phone, and the log has to carry a person rather than a session.
+- **The database.** One cabinet can keep its log in flash. Thirty-two cabinets need a server,
+  and the cabinets need to keep working when it is unreachable — local log, sync on reconnect.
+- **Integration.** A shop wants tool consumption against a job number and a cost centre, which
+  means talking to whatever ERP already exists.
+- **Actuation, for real drawers.** An SG90 moves a 20 g printed bin. A drawer rated for 80 kg
+  of tooling wants a proper geared motor or a solenoid latch and a gas strut. The rack and
+  pinion stays; the motor changes.
+
+**None of that is a hardware problem, and that is the point.** The cabinet is the cheap half.
+What a shop is buying is controlled access and a record — and that is where both the difficulty
+and the value sit.
+
+---
+
 ## What it deliberately isn't
 
 **It does not count anything.** Stock decrements because the software said you would take two.
