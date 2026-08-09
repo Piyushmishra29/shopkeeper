@@ -322,6 +322,38 @@ def s_web(d, ph, ctx):
         d.text(verb, (W - len(verb) * 8) // 2, 2, 0)
 
 
+def logo(d, x, y):
+    """The OMMI FORGE mark, 30 x 26, drawn rather than stored.
+
+    A bitmap would be a byte array nobody can read or edit; this is primitives,
+    so the proportions can be nudged in the source. Three parts, same as the
+    artwork: a hatched disc for the o, an F with its bar, and the rule they
+    both stand on."""
+    # the disc, hatched with diagonals - the hatching is what makes it read as
+    # the mark rather than as a circle
+    d.fb.ellipse(x + 9, y + 12, 9, 9, 1)
+    for k in range(-8, 12, 4):
+        d.fb.line(x + 1 + k, y + 21, x + 10 + k, y + 3, 1)
+    d.fb.ellipse(x + 9, y + 12, 9, 9, 1)      # redraw so hatching cannot spill
+    # the F: stem, top arm, and the solid bar that is red in the artwork
+    d.fill_rect(x + 19, y + 1, 4, 21, 1)
+    d.fill_rect(x + 19, y + 1, 10, 4, 1)
+    d.fill_rect(x + 23, y + 10, 6, 4, 1)
+    # the rule both stand on
+    d.fill_rect(x, y + 23, 30, 3, 1)
+
+
+def _ring(d, cx, cy, r, frac):
+    """Countdown ring, drawn as points around a circle. framebuf has no arc,
+    and stepping the angle is cheaper than any of the ways of faking one."""
+    n = 44
+    lit = int(n * max(0.0, min(1.0, frac)))
+    for i in range(lit):
+        a = -math.pi / 2 + 2 * math.pi * i / n
+        d.pixel(int(cx + r * math.cos(a)), int(cy + r * math.sin(a)), 1)
+        d.pixel(int(cx + (r - 1) * math.cos(a)), int(cy + (r - 1) * math.sin(a)), 1)
+
+
 def s_demo(d, ph, ctx):
     """Narrates the scripted demo. Whatever is on this screen is what the
     machine is doing at that instant - the stage is set by the demo task before
@@ -332,11 +364,16 @@ def s_demo(d, ph, ctx):
     d.fill(0)
     rail(d, "AUTO DEMO", dm.get("tag", ""))
     if stage == "HOLD":
-        left = dm.get("left", 0)
-        big_c(d, str(int(left)), 18, 4)
-        txt_c(d, "STARTING IN", 52)
-        w = int((W - 8) * max(0.0, min(1.0, dm.get("frac", 0.0))))
-        d.fill_rect(4, 60, w, 3, 1)
+        left = int(dm.get("left", 0))
+        logo(d, 6, 18)                       # the mark, left
+        cx, cy = 92, 32                      # the countdown, right
+        frac = 1.0 - max(0.0, min(1.0, dm.get("frac", 0.0)))
+        _ring(d, cx, cy, 19, frac)
+        _ring(d, cx, cy, 16, frac)
+        n = str(left)
+        d.big(n, cx - len(n) * 8, cy - 8, 2)
+        txt(d, "OMMI FORGE", 2, 50)
+        txt(d, "s", cx + 14, cy + 2)
     elif stage in ("OPEN", "CLOSE"):
         txt_c(d, dm.get("label", "BAY 1"), 15)
         pos = dm.get("pos", 0.0)
