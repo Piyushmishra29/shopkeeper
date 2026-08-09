@@ -65,24 +65,18 @@ remembers who had it last, and the shop buys another. Nobody is stealing; nobody
 a record either. Multiply by a year and it is a real number, and it never appears on any
 report because there is nothing generating one.
 
-The cabinets that fix this land in India around **₹20 lakh**. Most job shops will never buy
-at that price, so they carry the loss instead — which means the problem is not unsolved, it
-is unsold.
+The fix is not measurement. You do not need to weigh, photograph or tag anything to change
+behaviour — you need a drawer that stays shut until somebody is cleared to open it, and a
+line in a log with their name on it. **Nobody walks off with a tool their name is attached
+to.** The deterrent is the record.
 
-Then the part that decides this whole project:
+So this is exactly that, and nothing beyond it: controlled access plus an append-only log,
+on top of a tool database. **It counts nothing, and the interface says so** rather than
+implying a measurement it never takes. There is no load cell, no camera, no RFID, and the
+page does not pretend otherwise.
 
-> **Those cabinets do not sense anything.** No load cells, no cameras, no RFID on the tools.
-> They lock every drawer except the one you are cleared for, log that you opened it, and
-> assume you took what the screen said. Stock is trust plus a record.
-
-If that is the mechanism, the ₹20 lakh is not buying measurement. It is buying a lock, a
-motor, and a database — and the deterrent is the record, not the sensing. Nobody walks off
-with a tool their name is attached to.
-
-So this is exactly that, and nothing more: a drawer that stays shut until you are cleared,
-and a log that says who opened it. **It counts nothing, and it says so** rather than implying
-a measurement it never takes. 140 g of filament and about ₹2,000 of parts, built in 36 hours
-to make the argument in a room rather than on a slide.
+Built in 36 hours out of 140 g of filament and about ₹2,000 of parts, so the argument can be
+made with a working machine on the table instead of a slide.
 
 ---
 
