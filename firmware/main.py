@@ -20,6 +20,12 @@ import store
 from servo import Servo
 from server import App, serve
 
+try:
+    import sh1106
+    import hud
+except ImportError:      # a cabinet with no screen is still a cabinet
+    sh1106 = hud = None
+
 
 def _banner(*rows):
     # str.ljust does not exist in MicroPython - pad by hand
@@ -71,6 +77,71 @@ async def _housekeeping(app):
         gc.collect()
 
 
+def _hms(sec):
+    sec = int(sec)
+    if sec < 60:
+        return str(sec) + "s"
+    if sec < 3600:
+        return "%dm %02ds" % (sec // 60, sec % 60)
+    return "%dh %02dm" % (sec // 3600, (sec % 3600) // 60)
+
+
+def _hud_ctx(app, ip, mode):
+    """The same numbers the web terminal serves, shaped for a 128x64 panel.
+
+    Read off app/servo state rather than kept in parallel - a display that
+    disagrees with the page it sits next to is worse than no display."""
+    ds = [d.state() for d in app.drawers]
+    ev = app.log.entries
+    up = time.time() - app.boot_at
+    return {
+        "unit": "SK-N-0001",
+        "link": mode.split(":")[0] if mode else "-",
+        "ssid": config.AP_SSID,
+        "ip": ip,
+        "cycles": sum(x["cycles"] for x in ds),
+        "uptime": _hms(up),
+        "heap": str(gc.mem_free() // 1024) + "K",
+        "tools": len(getattr(config, "TOOLS", ()) or ()) or 8,
+        "events": len(ev),
+        "travel_mm": ds[0]["travel_mm"] if ds else 16.7,
+        "bays": [("BAY " + str(i + 1), x["pos"],
+                  "OPEN" if x["open"] else "SHUT") for i, x in enumerate(ds)],
+        "log": [(_hms(max(0, up - e.get("up", up))), e.get("what", "")[:8])
+                for e in ev[:3]],
+        "moving_label": "BAY 1",
+        "moving_pos": 0.0,
+    }
+
+
+async def _display(app, d, ip, mode):
+    """Attract loop at rest; live state whenever there is any.
+
+    Never allowed to take the cabinet down: any exception here parks the screen
+    and returns, because the drawer is the product and the screen is provision."""
+    loop = hud.Loop(d, dwell=config.OLED_DWELL)
+    try:
+        while True:
+            ctx = _hud_ctx(app, ip, mode)
+            over = None
+            for i, x in enumerate(d and [s.state() for s in app.drawers] or []):
+                if x["busy"]:
+                    ctx["moving_label"] = "BAY " + str(i + 1)
+                    ctx["moving_pos"] = x["pos"]
+                    over = hud.s_moving
+                    break
+            if over is None and app.locked:
+                over = hud.s_lock
+            loop.tick(ctx, over)
+            await asyncio.sleep_ms(40 if over else 90)
+    except Exception as e:
+        print("display stopped:", e)
+        try:
+            d.poweroff()
+        except Exception:
+            pass
+
+
 async def _amain():
     mode, ip = bring_up_network()
 
@@ -94,6 +165,16 @@ async def _amain():
 
     await serve(app)
     asyncio.create_task(_housekeeping(app))
+
+    disp = sh1106.attach() if sh1106 else None
+    if disp:
+        hud.splash_ok = True
+        hud.s_nameplate(disp, 1.0, {"link": mode.split(":")[0]})
+        disp.show()
+        asyncio.create_task(_display(app, disp, ip, mode))
+        print("display: SH1106 on SCL%d/SDA%d" % (config.OLED_SCL, config.OLED_SDA))
+    else:
+        print("display: none")
 
     _banner("shopkeeper NANO",
             "net    " + mode,

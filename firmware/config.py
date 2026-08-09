@@ -69,6 +69,19 @@ TRAVEL_MS = 1100
 # signal once the move has settled.
 DETACH_AFTER_MS = 450
 
+# ── top-face display ───────────────────────────────────────────────────────
+# 1.3" SH1106, not the 0.96" SSD1306 - see firmware/sh1106.py for the column
+# offset and the write-before-you-light-it rule that this part demands.
+# 400 kHz measures 32 ms a frame against 108 ms at 100 kHz, which is the
+# difference between animation and a slideshow.
+OLED          = True
+OLED_SCL      = 2
+OLED_SDA      = 1
+OLED_ADDR     = 0x3C
+OLED_FREQ     = 400000
+OLED_CONTRAST = 0x95
+OLED_DWELL    = 2.0        # seconds per attract screen
+
 # ── access ─────────────────────────────────────────────────────────────────
 # This is the whole product thesis in four lines. The ~20 lakh cabinets do
 # not weigh, photograph or RFID anything - inventory is trust-based, and what
