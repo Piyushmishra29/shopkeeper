@@ -147,6 +147,11 @@ async def _display(app, d, ip, mode):
 async def _amain():
     mode, ip = bring_up_network()
 
+    # Attach the display BEFORE anything moves. Parking the drawers is the
+    # peak current draw of the machine, and scanning for the panel during it
+    # finds nothing.
+    disp = sh1106.attach() if sh1106 else None
+
     drawers = [Servo(spec) for spec in config.DRAWERS]
     cal = store.load_cal()
     for d in drawers:
@@ -168,7 +173,6 @@ async def _amain():
     await serve(app)
     asyncio.create_task(_housekeeping(app))
 
-    disp = sh1106.attach() if sh1106 else None
     if disp:
         # Boot card. Uses SCREENS[0] rather than naming a screen: the set gets
         # reordered and renamed as the pitch changes, and a stale name here

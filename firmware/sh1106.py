@@ -113,14 +113,26 @@ def attach():
     Never raises. A cabinet whose screen is unplugged must still open drawers -
     the screen is provision, the drawer is the product."""
     import config
+    import time
     if not getattr(config, "OLED", True):
         return None
     try:
         from machine import Pin, I2C
         i2c = I2C(0, scl=Pin(config.OLED_SCL), sda=Pin(config.OLED_SDA),
                   freq=config.OLED_FREQ)
-        if config.OLED_ADDR not in i2c.scan():
-            return None
-        return SH1106(i2c, config.OLED_ADDR, contrast=config.OLED_CONTRAST)
     except Exception:
         return None
+    # Retry, do not scan once. main() parks both drawers at boot, and two
+    # servos moving is the peak current draw of the whole machine - the rail
+    # sags, the module stops acknowledging, and a single scan taken at that
+    # instant reports no display on a cabinet that has one. Observed exactly
+    # that: "display: none" at boot, 0x3C on the very next manual scan.
+    for attempt in range(6):
+        try:
+            if config.OLED_ADDR in i2c.scan():
+                return SH1106(i2c, config.OLED_ADDR,
+                              contrast=config.OLED_CONTRAST)
+        except Exception:
+            pass
+        time.sleep_ms(250)
+    return None
