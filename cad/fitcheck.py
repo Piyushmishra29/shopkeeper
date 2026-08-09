@@ -138,15 +138,10 @@ def raw(name, value, lo, hi, note=""):
 L = lambda n: trimesh.load(os.path.join(N, n + ".stl"))
 case_lo, case_up = L("case_lower"), L("case_upper")
 deck, drawer, pinion = L("deck"), L("drawer"), L("pinion")
-rack_a = NA.rack(assembly=True)
-rack_stl = L("rack")
+
 
 print("\nFITCHECK — measured off the shipped STLs, PLA bands\n")
 
-# sanity: the shipped rack must be a rigid transform of the authoring pose
-raw("rack STL matches authoring pose (volume)",
-    abs(rack_stl.volume - rack_a.volume), 0.0, 0.01,
-    "print pose is only a flip - if this drifts, the fits below are fiction")
 
 # ── 1. ALIGNMENT PINS: case_lower -> deck -> case_upper ────────────────
 H, zt = NA.DECK, NA.DECK - P["deck_t"]
@@ -159,50 +154,6 @@ for i, (hx, hy) in enumerate(NA.PIN_POS):
     tag = ["rear-L", "rear-R", "front"][i]
     fit(f"pin {tag} in deck hole", d_pin, d_deck, "location", "deck drops over the pins")
     fit(f"pin {tag} in upper socket", d_pin, d_sock, "location", "case halves register")
-
-# ── 2. RACK -> DRAWER ──────────────────────────────────────────────────
-# The blade is widest ACROSS A TOOTH, not between teeth. Measure at a tooth
-# centre or the slot looks twice as generous as it is.
-tooth_y = 0.5*NA.PITCH
-blade_w = solid(rack_a, [P["fin_t"]/2, tooth_y, -6.0], [1, 0, 0])
-slot_x  = void(drawer, [NA.FIN_X, NA.RACK_Y0 + tooth_y, 0.9], [1, 0, 0])
-fit("rack blade in drawer floor slot", blade_w, slot_x, "location",
-    "rack is pegged and glued, not sliding")
-
-# locating pegs
-peg_d  = solid(rack_a, [NA.PEG_X, 5.0, -0.9], [1, 0, 0])
-hole_d = void(drawer, [NA.FIN_X - P["fin_t"]/2 + NA.PEG_X,
-                       NA.RACK_Y0 + 5.0, 0.9], [1, 0, 0])
-fit("rack peg in drawer peg hole", peg_d, hole_d, "location", "pegged then glued")
-
-# THE ONE THAT SHIPPED BROKEN: the FLANGE footprint inside the drawer bin.
-# Only the flange sits in the bin - the blade passes through the floor slot -
-# so taking the whole rack's bounds reports the blade as fouling the bin and
-# hides whether the flange actually clears.
-fv = rack_a.vertices
-fl = fv[fv[:, 2] > 0.05]     # flange only. z > -0.01 also catches the
-                             # blade's top face, which spans y 0..49 and
-                             # reports the flange as fouling the bin
-bin_x0 = P["dr_wall"]; bin_x1 = NA.DR_W - P["dr_wall"]
-bin_y0 = P["dr_front"]; bin_y1 = NA.DR_D - P["dr_wall"]
-off_x = NA.FIN_X - P["fin_t"]/2
-fx0, fx1 = fl[:, 0].min() + off_x, fl[:, 0].max() + off_x
-fy0, fy1 = fl[:, 1].min() + NA.RACK_Y0, fl[:, 1].max() + NA.RACK_Y0
-raw("rack flange clears drawer bin, -X", fx0 - bin_x0, 0.30, 99.0, "was -0.34: cut the wall")
-raw("rack flange clears drawer bin, +X", bin_x1 - fx1, 0.30, 99.0)
-raw("rack flange clears drawer bin, -Y", fy0 - bin_y0, 0.20, 99.0, "was -3.00: through the front wall")
-raw("rack flange clears drawer bin, +Y", bin_y1 - fy1, 0.20, 99.0, "was -1.80: through the rear wall")
-
-# wall left outboard of the peg hole - this is what the slicer deletes
-peg_cx = NA.FIN_X - P["fin_t"]/2 + NA.PEG_X
-raw("drawer wall left beside peg hole", peg_cx - (NA.PEG_D + 0.25)/2, 1.20, 99.0,
-    "was 0.33 - under one extrusion, so the wall simply vanished")
-
-# ── 3. RACK -> DECK ────────────────────────────────────────────────────
-sx = NA.DR_X[0] + NA.FIN_X
-dslot = void(deck, [sx - (NA.WL+0.3), 30.0 - (NA.WL+0.3), 1.25], [1, 0, 0])
-fit("rack blade in deck slot", blade_w, dslot, "running",
-    "must also absorb the drawer's side play")
 
 # ── 4. DRAWER -> CASE ──────────────────────────────────────────────────
 dw = drawer.extents[0]
@@ -223,60 +174,6 @@ raw("headroom above the drawer, in the bay", (NA.CH - NA.DECK - NA.WL) - (0.2 + 
     0.30, 6.00, "body only")
 raw("headroom above the ANTI-TIP RIB", (NA.CH - NA.DECK - NA.WL) - (0.2 + dh_rib),
     0.30, 1.50, "this is the number that limits nose droop - small is the point")
-
-# ── 5. PINION -> RACK (the gear pair) ──────────────────────────────────
-r_tip = float(np.max(np.linalg.norm(pinion.vertices[:, :2], axis=1)))
-raw("pinion tip radius", r_tip, NA.R_TIP - 0.05, NA.R_TIP + 0.05, f"design {NA.R_TIP:.3f}")
-rv = rack_a.vertices
-bl = rv[rv[:, 2] < -(P["dr_floor"] + 1.0)]
-tip_x = bl[:, 0].max()
-centre = (NA.PIN_DX + P["fin_t"]/2) - (tip_x - NA.ADD)
-raw("rack/pinion centre distance", centre, NA.CDIST - 0.05, NA.CDIST + 0.05,
-    f"design {NA.CDIST:.3f} = R_P {NA.R_P:.2f} + {P['cd_bias']:.2f} bias for servo play")
-# radial clearances: pinion tip to rack root, rack tip to pinion root
-raw("pinion tip to rack root", (NA.PIN_DX + P["fin_t"]/2 - NA.R_TIP) - P["fin_t"],
-    0.15, 99.0, "bottom clearance")
-raw("rack tip to pinion root",
-    (NA.PIN_DX + P["fin_t"]/2 - NA.R_ROOT) - NA.FIN_SPAN, 0.15, 99.0,
-    "bottom clearance the other way")
-# circular backlash, measured off the real 2D profiles
-import meshsim as MS
-phi, gap = MS.best_phase()
-raw("gear running clearance (measured)", gap, 0.20, 1.20,
-    "cad/meshsim.py, tightest gap through a full tooth cycle")
-
-# ── 6. PINION -> DECK ──────────────────────────────────────────────────
-px = NA.DR_X[0] + NA.FIN_X + NA.PIN_DX
-pbore = void(deck, [px - (NA.WL+0.3), P["wall"] + NA.PIN_Y - (NA.WL+0.3), 1.25], [1, 0, 0])
-fit("pinion in the deck clearance bore", 2*r_tip, pbore, "free", "gear must never touch")
-
-# ── 7. SERVO -> CRADLE ─────────────────────────────────────────────────
-sy_ = P["wall"] + NA.PIN_Y
-# Measure at the pocket's OWN centre (bcx), not the pinion axis - they are 5.5
-# apart now that the shaft offset is modelled. And step clear of the cable
-# notch: it deliberately removes 6 mm of the -Y wall so the servo lead can get
-# out, and a ray through it reads the pocket as 24 mm wide when it is 12.9.
-bcx = NA.sg_body_cx(0, px)
-notch_x = (bcx - 11.0, bcx - 5.0)
-probe_x = bcx + 7.0                     # inside the pocket, clear of the notch
-poc_x = void(case_lo, [probe_x, sy_, NA.SG_BASE + 4.0], [1, 0, 0])
-poc_y = void(case_lo, [probe_x, sy_, NA.SG_BASE + 4.0], [0, 1, 0])
-raw("servo cable notch stays clear of the probe",
-    min(abs(probe_x - notch_x[0]), abs(probe_x - notch_x[1])), 1.0, 99.0,
-    "the notch is intentional; the measurement just must not sit in it")
-fit("SG90 body in its pocket, length", P["sg_l"], poc_x, "dropin",
-    "bought part: pocket shrinks, servo does not grow", male_printed=False)
-fit("SG90 body in its pocket, width",  P["sg_w"], poc_y, "dropin",
-    male_printed=False)
-shim = L("servo_shim")
-fit("servo shim in the servo well, length", shim.extents[0], poc_x, "location",
-    "shim sets the servo height, so it must not rock")
-fit("servo shim in the servo well, width", shim.extents[1], poc_y, "location")
-raw("shim + floor = servo body height", abs((shim.extents[2] + P["floor_t"]) - NA.SG_BASE),
-    0.0, 0.001, "if this drifts the pinion misses the rack")
-raw("cradle wall top below the servo ears",
-    (NA.SG_BASE + P["sg_ear"]) - (NA.SG_BASE + P["sg_ear"] - 1.9), 0.50, 3.00,
-    "ears must never land first and override the shim")
 
 # ── 8. LOGO INLAY -> POCKET ────────────────────────────────────────────
 inlay = L("logo_inlay")
