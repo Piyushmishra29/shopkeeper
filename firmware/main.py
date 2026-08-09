@@ -169,8 +169,10 @@ async def _amain():
 
     disp = sh1106.attach() if sh1106 else None
     if disp:
-        hud.splash_ok = True
-        hud.s_nameplate(disp, 1.0, {"link": mode.split(":")[0]})
+        # Boot card. Uses SCREENS[0] rather than naming a screen: the set gets
+        # reordered and renamed as the pitch changes, and a stale name here
+        # crashes main and leaves the cabinet at a REPL prompt with no server.
+        hud.SCREENS[0](disp, 1.0, {"link": mode.split(":")[0]})
         disp.show()
         asyncio.create_task(_display(app, disp, ip, mode))
         print("display: SH1106 on SCL%d/SDA%d" % (config.OLED_SCL, config.OLED_SDA))
