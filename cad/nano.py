@@ -604,7 +604,11 @@ def drawer():
     tip = hp - ADD*math.tan(P["press"])
     rt  = hp + DED*math.tan(P["press"])
     x0t = FIN_X - P["fin_t"]/2            # teeth run in the old blade's lane
-    x1t = x0t + P["fin_t"] + 2.0          # a little wider for pinion alignment
+    # THE LANE MUST BE WIDER THAN THE PINION. It was fin_t + 2.0 = 5.00 mm
+    # against a 6.00 mm gear: the pinion could not enter the channel at all,
+    # so the drive was dead however good the tooth profile was. gear_t + 2.4
+    # gives 1.2 mm a side, enough for the drawer's own side play.
+    x1t = x0t + P["gear_t"] + 2.4
     # SPACES between teeth, cut upward from the underside: wide at z=0 where
     # the tooth tips are, narrowing to the root at z=TOOTH_H. prism_x takes
     # (y,z) points directly - the previous hand-rolled rotation put 1.56 mm
@@ -850,6 +854,10 @@ chk("servo body clears the electronics",
 # involute sanity: a tip thinner than one extrusion is a tip the machine rounds
 _tip = 2*tooth_half_angle(R_TIP)*R_TIP
 chk("pinion tooth tip is printable", _tip >= 0.60, f"{_tip:.3f} mm at the tip")
+_lane = P["gear_t"] + 2.4
+chk("pinion fits inside the tooth lane", _lane >= P["gear_t"] + 1.0,
+    f"lane {_lane:.2f} mm, pinion {P['gear_t']:.2f} mm -> "
+    f"{(_lane-P['gear_t'])/2:.2f} a side")
 # lying servos: bodies run along X from each pinion, ears along Y
 _ear_y0 = WL + PIN_Y - 5.9 - (P["sg_tab"]-P["sg_l"])/2
 _ear_y1 = WL + PIN_Y + P["sg_l"] - 5.9 + (P["sg_tab"]-P["sg_l"])/2
