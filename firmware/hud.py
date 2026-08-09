@@ -145,9 +145,10 @@ def s_what(d, ph, ctx):
 def s_proof(d, ph, ctx):
     """Measured on the bench, not claimed. This is the screen that matters."""
     d.fill(0)
-    n = ctx.get("test_cycles", 60)
+    n = ctx.get("test_cycles", 0)
+    f = ctx.get("test_fail", 0)
     shown = int(_ease(min(ph * 1.7, 1.0)) * n)
-    _claim(d, "VERIFIED", str(shown), "CYCLES  0 FAIL", ph)
+    _claim(d, "VERIFIED", str(shown), "CYCLES  %d FAIL" % f, ph)
 
 
 # ── 4. the hardware is real ───────────────────────────────────────────────

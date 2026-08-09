@@ -69,6 +69,19 @@ TRAVEL_MS = 1100
 # signal once the move has settled.
 DETACH_AFTER_MS = 450
 
+# ── bench record ───────────────────────────────────────────────────────────
+# What the VERIFIED screen shows. These are not aspirational: each number is
+# the confirmed total from tools/bay2_endurance.py runs, whose JSON reports are
+# the evidence. A cycle counts only if the harness polled until busy cleared
+# AND the drawer's own open flag flipped - the API returns 202 the moment it
+# accepts a job, so counting requests would prove nothing.
+# Raise these when a run finishes, never before.
+#   60  bay 2, sequential
+#  100  bay 1  ) both bays driven SIMULTANEOUSLY, which is the worst case
+#  100  bay 2  ) for supply sag - no brownout, no reboot, 0 failures
+TEST_CYCLES   = 260
+TEST_FAILURES = 0
+
 # ── top-face display ───────────────────────────────────────────────────────
 # 1.3" SH1106, not the 0.96" SSD1306 - see firmware/sh1106.py for the column
 # offset and the write-before-you-light-it rule that this part demands.

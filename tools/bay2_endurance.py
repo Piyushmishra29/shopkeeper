@@ -12,8 +12,8 @@ board's event log is sampled as it goes - LOG_MAX is 60 and this run makes
 import json, sys, time, urllib.request
 
 HOST = sys.argv[1] if len(sys.argv) > 1 else "192.168.0.114"
-BAY  = 1                       # bay two == Drawer B == GPIO 6
-N    = 60
+BAY  = int(sys.argv[2]) if len(sys.argv) > 2 else 1   # 0 = bay one, 1 = bay two
+N    = int(sys.argv[3]) if len(sys.argv) > 3 else 60
 BASE = f"http://{HOST}"
 
 def get(path, t=8):
@@ -104,12 +104,13 @@ rep = {
     "mem_start": st0.get("mem"), "mem_end": st1.get("mem"),
     "rows": rows,
 }
-out = "/private/tmp/claude-501/-Users-piyushmishra/5f7839e0-775c-4226-90ac-774bd91f5419/scratchpad/bay2_endurance.json"
+out = ("/private/tmp/claude-501/-Users-piyushmishra/"
+       "5f7839e0-775c-4226-90ac-774bd91f5419/scratchpad/endurance_bay%d.json" % BAY)
 json.dump(rep, open(out, "w"), indent=1)
 
 ot = [r["open"] for r in rows if r.get("open")]
 ct = [r["close"] for r in rows if r.get("close")]
-print(f"\n{'='*54}\nBAY TWO — {N} CYCLES\n{'='*54}")
+print(f"\n{'='*54}\nBAY {BAY+1} — {N} CYCLES\n{'='*54}")
 print(f"  commanded            {N}")
 print(f"  confirmed open       {done_o}/{N}")
 print(f"  confirmed close      {done_c}/{N}")
@@ -121,5 +122,5 @@ print(f"  elapsed              {elapsed/60:.1f} min")
 print(f"  uptime {st0['uptime']} -> {st1['uptime']}   rebooted={rep['rebooted']}")
 print(f"  failures             {len(fail)}")
 for f in fail[:10]: print(f"     {f}")
-print(f"\n  VERDICT: {'SIXTY CONFIRMED' if done_o == N and done_c == N and not fail else 'INCOMPLETE'}")
+print(f"\n  VERDICT: {str(N)+' CONFIRMED' if done_o == N and done_c == N and not fail else 'INCOMPLETE'}")
 print(f"  report -> {out}")

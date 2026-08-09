@@ -309,11 +309,18 @@ Sixty open-close cycles on bay two, driven over HTTP by
 
 | | |
 |---|---|
-| confirmed open / close | **60 / 60** and **60 / 60** |
-| failures | 0 |
-| reboots | 0 — uptime monotonic across the run |
-| heap | 2,031,248 → 2,023,696 bytes over 120 moves |
-| move time | 1.95 s mean, 3.52 s worst (includes HTTP and poll latency) |
+| bay 2, sequential | **60 / 60** open and close |
+| bay 1, concurrent | **100 / 100** |
+| bay 2, concurrent | **100 / 100** |
+| **total** | **260 confirmed cycles, 0 failures** |
+| reboots | 0 — uptime monotonic across every run |
+| move time | 2.1 s mean, 4.1 s worst (includes HTTP and poll latency) |
+
+The last two runs drove **both bays at once**, which is the worst case for
+supply sag: two SG90s under load on the same rail is what browns out a 3V3
+regulator. Sampling mid-run caught them genuinely overlapping - bay 1 closing
+through 1.00 → 0.04 while bay 2 opened 0.00 → 0.93 in the same window. Uptime
+stayed monotonic throughout, so nothing reset.
 
 Counting successful POSTs would have proved nothing. `/api/drawer` returns **202** the moment it
 accepts the job and runs the move asynchronously, so a servo that never twitched would still report
