@@ -42,6 +42,36 @@ India around **₹20 lakh**. Same job, out of about 140 g of filament and roughl
 
 ---
 
+## The machine that exists
+
+<p align="center">
+  <img src="docs/img/product/nano_1.jpg" width="100%" alt="shopkeeper NANO, assembled and running">
+</p>
+
+<table>
+<tr>
+<td width="33%"><img src="docs/img/product/nano_2.jpg" width="100%" alt="shopkeeper NANO"></td>
+<td width="33%"><img src="docs/img/product/nano_3.jpg" width="100%" alt="shopkeeper NANO"></td>
+<td width="33%"><img src="docs/img/product/nano_4.jpg" width="100%" alt="shopkeeper NANO"></td>
+</tr>
+</table>
+
+Not a render — the printed article, powered up, mid attract-loop. The panel is
+showing the scripted demo counting down; the two lamps are the bay indicators;
+the mark on the lid is a separate part pressed into a debossed pocket, printed
+in the same 0.4 nozzle as everything else.
+
+Everything on this page is measured from that object or from the meshes that
+produced it. **260 open-close cycles, zero failures**, both bays driven
+simultaneously.
+
+Photographs were cut from their background with `tools/cutout.swift`, which
+uses Vision's foreground-instance mask — the same engine behind Preview's
+Remove Background. The obvious route was `rembg`, which cannot be installed
+here: `onnxruntime` has no build for Python 3.14.
+
+---
+
 ## The argument
 
 The established smart tool cabinets land in India at roughly ₹20 lakh. They are serious machines:
