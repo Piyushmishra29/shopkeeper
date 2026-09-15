@@ -56,6 +56,9 @@ def bring_up_network():
             return "STA:" + ssid, sta.ifconfig()[0]
         sta.active(False)
 
+    if not config.AP_PASSWORD or len(config.AP_PASSWORD) < 8:
+        # Refuse rather than fall through to an open AP next to the drawers.
+        raise RuntimeError("set AP_PASSWORD (8+ chars) in firmware/secrets.py")
     ap = network.WLAN(network.AP_IF)
     ap.active(True)
     try:

@@ -53,12 +53,13 @@ in a meeting room with no guest wifi:
 | | |
 |---|---|
 | SSID | `shopkeeper-NANO` |
-| Password | `forge2026` |
+| Password | `AP_PASSWORD` from `secrets.py` |
 | URL | **http://192.168.4.1/** |
 | PIN | `2468` |
 
-Set `JOIN = ("ssid", "password")` in `config.py` to join an existing network
-first and fall back to the AP.
+Copy `secrets_example.py` to `secrets.py` (gitignored) and set `AP_PASSWORD`;
+the firmware refuses to bring up the AP without one. Set `JOIN = ("ssid",
+"password")` there too to join an existing network first and fall back to the AP.
 
 ## Wiring
 

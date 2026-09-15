@@ -14,7 +14,6 @@ import math
 # and the salesperson's phone joins it. Set JOIN to a (ssid, password) tuple to
 # also try an existing network first.
 AP_SSID     = "shopkeeper-NANO"
-AP_PASSWORD = "forge2026"          # >= 8 chars or the ESP refuses to start the AP
 # Joining the house network first means the cabinet is reachable from a laptop
 # that is also on the internet. Falls back to its own AP if the join fails, so
 # the meeting-room case still works.
@@ -22,10 +21,14 @@ AP_PASSWORD = "forge2026"          # >= 8 chars or the ESP refuses to start the 
 # CREDENTIALS DO NOT LIVE IN THIS FILE. This is a public repository and a real
 # SSID and password were committed here once already. secrets.py is gitignored;
 # copy secrets_example.py to secrets.py and put them there.
+# The AP password lives there too: a default printed in a public repo is the
+# same password on every cabinet ever flashed from it.
 try:
-    from secrets import JOIN
+    import secrets as _secrets
 except ImportError:
-    JOIN = None                    # no secrets.py -> AP mode only, which is safe
+    _secrets = None
+JOIN        = getattr(_secrets, "JOIN", None)         # None -> AP mode only
+AP_PASSWORD = getattr(_secrets, "AP_PASSWORD", None)  # >= 8 chars; main.py refuses to start the AP without it
 JOIN_TIMEOUT_S = 12
 
 # ── servos ─────────────────────────────────────────────────────────────────

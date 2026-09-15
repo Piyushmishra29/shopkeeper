@@ -215,13 +215,14 @@ an afternoon blaming the code.
 ### Run it
 
 The cabinet brings up **its own access point**, because a demonstrator has to work in a meeting room
-with no guest wifi. Set `JOIN = ("ssid", "password")` in `firmware/config.py` to try an existing
-network first and fall back to the AP.
+with no guest wifi. Copy `firmware/secrets_example.py` to `firmware/secrets.py` (gitignored) and set
+`AP_PASSWORD` — the firmware refuses to start the AP without one. Set `JOIN = ("ssid", "password")`
+there too to try an existing network first and fall back to the AP.
 
 | | |
 |---|---|
 | SSID | `shopkeeper-NANO` |
-| Password | `forge2026` |
+| Password | `AP_PASSWORD` from `firmware/secrets.py` |
 | URL | **http://192.168.4.1/** |
 | PIN | `2468` — but see below |
 
